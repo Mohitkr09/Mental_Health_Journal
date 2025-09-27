@@ -12,10 +12,12 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { useJournal } from "../context/JournalContext.jsx"; // ✅ use context
+import { useJournal } from "../context/JournalContext.jsx";
+import { useTheme } from "../context/ThemeContext.jsx";
 
 export default function Insights() {
-  const { entries } = useJournal(); // ✅ get journal entries from context
+  const { entries } = useJournal();
+  const { theme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -37,54 +39,80 @@ export default function Insights() {
     happy: 6,
   };
 
-  // ✅ Prepare chart data
-  const lineData = entries
-    .map((item) => ({
-      date: new Date(item.date || item.createdAt).toLocaleDateString(),
-      moodValue: moodScale[item.mood] || 0,
-      moodLabel: item.mood,
-    }))
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Prepare line chart data
+  const lineData =
+    entries && entries.length
+      ? entries
+          .map((item) => ({
+            date: new Date(item.date || item.createdAt).toLocaleDateString(),
+            moodValue: moodScale[item.mood] || 0,
+            moodLabel: item.mood || "neutral",
+          }))
+          .sort((a, b) => new Date(a.date) - new Date(b.date))
+      : [{ date: "No Data", moodValue: 0, moodLabel: "neutral" }];
 
+  // Prepare pie chart data
   const moodCounts = entries.reduce((acc, item) => {
     acc[item.mood] = (acc[item.mood] || 0) + 1;
     return acc;
   }, {});
-  const pieData = Object.keys(moodCounts).map((m) => ({
-    name: m,
-    value: moodCounts[m],
-  }));
 
-  // ✅ Simulate loading
-  useEffect(() => {
-    setLoading(false);
-  }, []);
+  const pieData =
+    Object.keys(moodCounts).length > 0
+      ? Object.keys(moodCounts).map((m) => ({ name: m, value: moodCounts[m] }))
+      : [{ name: "No Data", value: 1 }];
 
-  if (loading) return <p className="text-center text-gray-500 mt-8">⏳ Loading insights...</p>;
+  // Chart theme colors
+  const chartBg = theme === "dark" ? "#1f2937" : "#ffffff";
+  const textColor = theme === "dark" ? "#f3f4f6" : "#111827";
+  const gridColor = theme === "dark" ? "#374151" : "#e5e7eb";
+
+  useEffect(() => setLoading(false), []);
+
+  if (loading)
+    return <p className="text-center text-gray-500 mt-8">⏳ Loading insights...</p>;
   if (error) return <p className="text-center text-red-500 mt-8">{error}</p>;
 
   return (
-    <div className="max-w-5xl mx-auto px-4">
-      <h2 className="text-3xl font-bold text-purple-700 mb-6 text-center">
+    <div
+      className={`max-w-5xl mx-auto px-4 min-h-screen transition-colors duration-300 ${
+        theme === "dark" ? "bg-gray-900" : "bg-purple-50"
+      }`}
+    >
+      <h2
+        className={`text-3xl font-bold mb-6 text-center transition-colors duration-300 ${
+          theme === "dark" ? "text-purple-300" : "text-purple-700"
+        }`}
+      >
         📊 Mood Insights
       </h2>
 
-      {/* === Line Chart: Mood Over Time === */}
-      <div className="bg-white p-6 rounded-xl shadow-md mb-10">
-        <h3 className="text-lg font-semibold mb-4">Mood Over Time</h3>
-        {lineData.length ? (
-          <ResponsiveContainer width="100%" height={300}>
+      {/* === Line Chart === */}
+      <div
+        className="p-6 rounded-xl shadow-md mb-10 transition-colors duration-300"
+        style={{ backgroundColor: chartBg, minHeight: 350 }}
+      >
+        <h3
+          className="text-lg font-semibold mb-4 transition-colors duration-300"
+          style={{ color: textColor }}
+        >
+          Mood Over Time
+        </h3>
+        <div style={{ width: "100%", height: 300 }}>
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={lineData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
+              <CartesianGrid stroke={gridColor} strokeDasharray="3 3" />
+              <XAxis dataKey="date" stroke={textColor} />
               <YAxis
                 domain={[0, 6]}
                 ticks={[1, 2, 3, 4, 5, 6]}
+                stroke={textColor}
                 tickFormatter={(val) =>
                   Object.keys(moodScale).find((k) => moodScale[k] === val)
                 }
               />
               <Tooltip
+                contentStyle={{ backgroundColor: chartBg, color: textColor }}
                 formatter={(val) =>
                   Object.keys(moodScale).find((k) => moodScale[k] === val)
                 }
@@ -98,16 +126,22 @@ export default function Insights() {
               />
             </LineChart>
           </ResponsiveContainer>
-        ) : (
-          <p className="text-center text-gray-400">No mood entries yet.</p>
-        )}
+        </div>
       </div>
 
-      {/* === Pie Chart: Mood Distribution === */}
-      <div className="bg-white p-6 rounded-xl shadow-md">
-        <h3 className="text-lg font-semibold mb-4">Mood Distribution</h3>
-        {pieData.length ? (
-          <ResponsiveContainer width="100%" height={300}>
+      {/* === Pie Chart === */}
+      <div
+        className="p-6 rounded-xl shadow-md transition-colors duration-300"
+        style={{ backgroundColor: chartBg, minHeight: 350 }}
+      >
+        <h3
+          className="text-lg font-semibold mb-4 transition-colors duration-300"
+          style={{ color: textColor }}
+        >
+          Mood Distribution
+        </h3>
+        <div style={{ width: "100%", height: 300 }}>
+          <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={pieData}
@@ -115,21 +149,18 @@ export default function Insights() {
                 cy="50%"
                 outerRadius={100}
                 dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }) =>
+                  `${name} ${(percent * 100).toFixed(0)}%`
+                }
               >
                 {pieData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={COLORS[entry.name] || "#a3a3a3"}
-                  />
+                  <Cell key={`cell-${index}`} fill={COLORS[entry.name] || "#a3a3a3"} />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip contentStyle={{ backgroundColor: chartBg, color: textColor }} />
             </PieChart>
           </ResponsiveContainer>
-        ) : (
-          <p className="text-center text-gray-400">No mood data to show.</p>
-        )}
+        </div>
       </div>
     </div>
   );

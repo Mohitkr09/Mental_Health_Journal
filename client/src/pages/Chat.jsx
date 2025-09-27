@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Bot, User } from "lucide-react";
+import { useTheme } from "../context/ThemeContext.jsx"; // ✅ Import ThemeContext
 
 const moods = [
   { label: "😊", value: "happy" },
@@ -12,6 +13,7 @@ const moods = [
 ];
 
 export default function Chat() {
+  const { theme } = useTheme(); // ✅ Get current theme
   const [mood, setMood] = useState("");
   const [message, setMessage] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
@@ -65,21 +67,33 @@ export default function Chat() {
       }`}
     >
       {sender === "ai" && (
-        <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full bg-gray-300">
+        <div
+          className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full ${
+            theme === "dark" ? "bg-gray-700 text-white" : "bg-gray-300"
+          }`}
+        >
           <Bot size={18} />
         </div>
       )}
       <div
         className={`p-2 sm:p-3 rounded-2xl shadow-md max-w-[75%] sm:max-w-[70%] md:max-w-[60%] ${
           sender === "user"
-            ? "bg-blue-600 text-white rounded-br-none"
+            ? theme === "dark"
+              ? "bg-blue-500 text-white rounded-br-none"
+              : "bg-blue-600 text-white rounded-br-none"
+            : theme === "dark"
+            ? "bg-gray-800 text-gray-200 rounded-bl-none"
             : "bg-gray-200 text-gray-800 rounded-bl-none"
         }`}
       >
         {text}
       </div>
       {sender === "user" && (
-        <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full bg-blue-500 text-white">
+        <div
+          className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full ${
+            theme === "dark" ? "bg-blue-600 text-white" : "bg-blue-500 text-white"
+          }`}
+        >
           <User size={18} />
         </div>
       )}
@@ -87,7 +101,13 @@ export default function Chat() {
   );
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-b from-blue-50 to-white p-2 sm:p-4">
+    <div
+      className={`flex flex-col h-screen p-2 sm:p-4 ${
+        theme === "dark"
+          ? "bg-gray-900 text-white"
+          : "bg-gradient-to-b from-blue-50 to-white text-gray-900"
+      }`}
+    >
       {/* Centered container for larger screens */}
       <div className="flex-1 flex justify-center">
         <div className="flex flex-col w-full max-w-2xl">
@@ -99,7 +119,7 @@ export default function Chat() {
                 onClick={() => setMood(m.value)}
                 className={`text-xl sm:text-2xl transition transform hover:scale-125 ${
                   mood === m.value ? "scale-125" : ""
-                }`}
+                } ${theme === "dark" ? "text-white" : "text-black"}`}
               >
                 {m.label}
               </button>
@@ -107,7 +127,13 @@ export default function Chat() {
           </div>
 
           {/* Chat Area */}
-          <div className="flex-1 overflow-y-auto p-3 sm:p-4 bg-white rounded-lg shadow-inner border">
+          <div
+            className={`flex-1 overflow-y-auto p-3 sm:p-4 rounded-lg shadow-inner border ${
+              theme === "dark"
+                ? "bg-gray-800 border-gray-700"
+                : "bg-white border-gray-200"
+            }`}
+          >
             <AnimatePresence>
               {chatHistory.map((msg, idx) => (
                 <ChatMessage key={idx} sender={msg.sender} text={msg.text} />
@@ -136,12 +162,18 @@ export default function Chat() {
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={loading}
-              className="flex-1 p-2 sm:p-3 border rounded-full shadow focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm sm:text-base"
+              className={`flex-1 p-2 sm:p-3 border rounded-full shadow focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm sm:text-base ${
+                theme === "dark"
+                  ? "bg-gray-800 text-white border-gray-700 placeholder-gray-400"
+                  : "bg-white text-gray-900 border-gray-300 placeholder-gray-500"
+              }`}
             />
             <button
               onClick={sendMessage}
               disabled={loading}
-              className="p-2 sm:p-3 rounded-full bg-blue-600 text-white shadow hover:bg-blue-700 transition disabled:opacity-50"
+              className={`p-2 sm:p-3 rounded-full shadow hover:bg-blue-700 transition disabled:opacity-50 ${
+                theme === "dark" ? "bg-blue-500 text-white" : "bg-blue-600 text-white"
+              }`}
             >
               <Send size={18} />
             </button>

@@ -5,7 +5,7 @@ import { useJournal } from "../context/JournalContext.jsx";
 
 export default function Home() {
   const [showCookie, setShowCookie] = useState(true);
-  const { addEntry } = useJournal(); // ✅ Access addEntry from context
+  const { addEntry } = useJournal();
 
   const guides = [
     {
@@ -39,22 +39,19 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-purple-100 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-purple-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 flex flex-col transition-colors duration-300">
       
       {/* ✅ Daily Mood Popup */}
       <DailyMoodPopup 
-        onNewEntry={(entry) => {
-          // Add new mood entry to JournalContext immediately
-          addEntry(entry);
-        }} 
+        onNewEntry={(entry) => addEntry(entry)} 
       />
 
       {/* Hero Section */}
       <main className="flex flex-col items-center justify-center flex-1 text-center px-4 sm:px-6 lg:px-12">
-        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 leading-snug sm:leading-tight">
-          Welcome to <span className="text-purple-600">MindCare</span> ✨
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 dark:text-white leading-snug sm:leading-tight">
+          Welcome to <span className="text-purple-600 dark:text-purple-400">MindCare</span> ✨
         </h2>
-        <p className="mt-4 sm:mt-6 text-base sm:text-lg lg:text-xl text-gray-600 max-w-xl sm:max-w-2xl">
+        <p className="mt-4 sm:mt-6 text-base sm:text-lg lg:text-xl text-gray-600 dark:text-gray-300 max-w-xl sm:max-w-2xl">
           Your private AI-enhanced journaling guide to heal, grow, and flourish.
         </p>
 
@@ -63,20 +60,20 @@ export default function Home() {
           {guides.map((guide, idx) => (
             <div
               key={idx}
-              className={`rounded-2xl shadow-lg overflow-hidden flex flex-col bg-gradient-to-br ${guide.gradient}`}
+              className={`rounded-2xl shadow-lg overflow-hidden flex flex-col bg-gradient-to-br ${guide.gradient} dark:from-gray-700 dark:via-gray-800 dark:to-gray-900`}
             >
               <div className="p-6 flex flex-col flex-1">
-                <span className="inline-block text-xs font-semibold bg-green-100 text-green-700 px-3 py-1 rounded-full w-fit">
+                <span className="inline-block text-xs font-semibold bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 px-3 py-1 rounded-full w-fit">
                   Featured
                 </span>
-                <h3 className="mt-4 text-xl font-bold text-gray-900">{guide.title}</h3>
-                <p className="mt-2 text-sm font-medium text-gray-700">{guide.author}</p>
-                <p className="mt-3 text-gray-600 text-sm flex-1">{guide.desc}</p>
+                <h3 className="mt-4 text-xl font-bold text-gray-900 dark:text-white">{guide.title}</h3>
+                <p className="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">{guide.author}</p>
+                <p className="mt-3 text-gray-600 dark:text-gray-400 text-sm flex-1">{guide.desc}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {guide.tags.map((tag, tIdx) => (
                     <span
                       key={tIdx}
-                      className="text-xs font-medium bg-white/70 px-3 py-1 rounded-full text-gray-700"
+                      className="text-xs font-medium bg-white/70 dark:bg-gray-700 px-3 py-1 rounded-full text-gray-700 dark:text-gray-200"
                     >
                       {tag}
                     </span>
@@ -90,19 +87,19 @@ export default function Home() {
 
       {/* Cookie Consent */}
       {showCookie && (
-        <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 w-[95%] sm:w-[90%] max-w-xl bg-white shadow-xl rounded-2xl p-4 sm:p-6 flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
-          <p className="text-gray-600 text-xs sm:text-sm leading-relaxed text-center sm:text-left">
-            By using <span className="font-semibold text-purple-600">MindCare</span>, 
+        <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 w-[95%] sm:w-[90%] max-w-xl bg-white dark:bg-gray-800 shadow-xl rounded-2xl p-4 sm:p-6 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 transition-colors duration-300">
+          <p className="text-gray-600 dark:text-gray-300 text-xs sm:text-sm leading-relaxed text-center sm:text-left">
+            By using <span className="font-semibold text-purple-600 dark:text-purple-400">MindCare</span>, 
             you agree to the storing of cookies on your device to enhance navigation, 
             analyze site usage, and support our mindful community. Read our{" "}
-            <a href="/privacy" className="text-purple-600 underline">
+            <a href="/privacy" className="text-purple-600 dark:text-purple-400 underline">
               Privacy Policy
             </a>{" "}
             for more information.
           </p>
           <button
             onClick={() => setShowCookie(false)}
-            className="px-4 sm:px-5 py-2 rounded-full bg-purple-600 text-white hover:bg-purple-700 transition text-sm sm:text-base"
+            className="px-4 sm:px-5 py-2 rounded-full bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 transition text-sm sm:text-base"
           >
             Understood
           </button>
@@ -110,7 +107,7 @@ export default function Home() {
       )}
 
       {/* Footer */}
-      <footer className="py-4 sm:py-6 text-center text-gray-500 text-xs sm:text-sm border-t mt-8 sm:mt-12">
+      <footer className="py-4 sm:py-6 text-center text-gray-500 dark:text-gray-400 text-xs sm:text-sm border-t border-gray-200 dark:border-gray-700 mt-8 sm:mt-12 transition-colors duration-300">
         © {new Date().getFullYear()} SoulScribe. All rights reserved.
       </footer>
     </div>

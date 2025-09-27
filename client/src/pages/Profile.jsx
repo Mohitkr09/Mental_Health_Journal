@@ -2,10 +2,12 @@ import { useState } from "react";
 import api from "../utils/api";
 import { toast, ToastContainer } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
+import { useTheme } from "../context/ThemeContext.jsx";
 
 export default function Profile({ user, setUser }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { theme } = useTheme(); // ✅ get current theme
 
   // Refresh user profile
   const fetchProfile = async () => {
@@ -50,23 +52,35 @@ export default function Profile({ user, setUser }) {
     }
   };
 
+  // ✅ Theme-based styles
+  const bgColor = theme === "dark" ? "bg-gray-800" : "bg-white";
+  const textColor = theme === "dark" ? "text-gray-200" : "text-gray-900";
+  const subTextColor = theme === "dark" ? "text-gray-400" : "text-gray-500";
+  const buttonActive = theme === "dark" ? "bg-purple-700 hover:bg-purple-800" : "bg-purple-600 hover:bg-purple-700";
+
   return (
-    <div className="max-w-2xl mx-auto mt-10 p-6 bg-white rounded-xl shadow-md">
+    <div className={`max-w-2xl mx-auto mt-10 p-6 rounded-xl shadow-md transition-colors duration-300 ${bgColor}`}>
       <ToastContainer />
       <img
         src={user.avatar || "/default-avatar.png"}
         alt="Profile"
         className="w-24 h-24 rounded-full mx-auto"
       />
-      <h2 className="text-2xl font-bold text-center mt-4">{user.name}</h2>
-      <p className="text-center text-gray-500">{user.email}</p>
+      <h2 className={`text-2xl font-bold text-center mt-4 ${textColor}`}>{user.name}</h2>
+      <p className={`text-center ${subTextColor}`}>{user.email}</p>
 
       <div className="mt-6 flex flex-col items-center gap-3">
-        <input type="file" accept="image/*" onChange={handleFileChange} />
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className={`text-sm sm:text-base ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}
+        />
         <button
           onClick={handleUpload}
           disabled={loading || !selectedFile}
-          className={`px-4 py-2 rounded text-white ${loading || !selectedFile ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
+          className={`px-4 py-2 rounded text-white transition-colors duration-300 
+            ${loading || !selectedFile ? 'bg-gray-400 cursor-not-allowed' : buttonActive}`}
         >
           {loading ? "Uploading..." : "Update Avatar"}
         </button>

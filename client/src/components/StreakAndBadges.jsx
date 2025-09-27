@@ -1,6 +1,16 @@
+// src/components/StreakAndBadges.jsx
 import { useState, useEffect } from "react";
 import { Flame, Award } from "lucide-react";
 import Swal from "sweetalert2";
+import {
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 export default function StreakAndBadges() {
   const [streak, setStreak] = useState(3); // mock streak (days)
@@ -10,6 +20,17 @@ export default function StreakAndBadges() {
     { id: 3, name: "One Week Strong", unlocked: false, emoji: "💪" },
     { id: 4, name: "Night Owl", unlocked: false, emoji: "🌙" },
   ]);
+
+  // 🎯 Mock streak history for chart
+  const streakData = [
+    { day: "Mon", streak: 1 },
+    { day: "Tue", streak: 2 },
+    { day: "Wed", streak: 3 },
+    { day: "Thu", streak: 2 },
+    { day: "Fri", streak: 3 },
+    { day: "Sat", streak: 4 },
+    { day: "Sun", streak: 5 },
+  ];
 
   // ✅ Simulate earning a new badge after 5 seconds
   useEffect(() => {
@@ -45,8 +66,40 @@ export default function StreakAndBadges() {
         <Flame className="text-orange-500" size={28} />
         <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
           Current Streak:{" "}
-          <span className="text-orange-600 dark:text-orange-400">{streak} days</span>
+          <span className="text-orange-600 dark:text-orange-400">
+            {streak} days
+          </span>
         </h2>
+      </div>
+
+      {/* 📊 Streak Progress Graph */}
+      <div className="w-full h-48 mb-6">
+        <ResponsiveContainer>
+          <LineChart data={streakData}>
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="currentColor"
+              className="text-gray-300 dark:text-gray-700"
+            />
+            <XAxis dataKey="day" stroke="currentColor" className="text-gray-700 dark:text-gray-300" />
+            <YAxis stroke="currentColor" className="text-gray-700 dark:text-gray-300" />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "var(--tw-prose-body, #fff)",
+                border: "1px solid #ccc",
+                color: "inherit",
+              }}
+              labelStyle={{ color: "inherit" }}
+            />
+            <Line
+              type="monotone"
+              dataKey="streak"
+              stroke="#f97316" // orange-500
+              strokeWidth={2}
+              dot={{ r: 5, fill: "#9333ea" }} // purple-600 dots
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
       {/* 🏅 Badge Section */}
