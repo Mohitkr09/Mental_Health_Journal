@@ -1,7 +1,7 @@
 // src/pages/Journal.jsx
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { useTheme } from "../context/ThemeContext.jsx"; // ✅ import theme context
+import { useTheme } from "../context/ThemeContext.jsx"; 
 
 export default function Journal() {
   const { theme } = useTheme();
