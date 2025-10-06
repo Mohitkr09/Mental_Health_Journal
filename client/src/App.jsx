@@ -9,7 +9,9 @@ import { JournalProvider } from "./context/JournalContext.jsx";
 // Components & Pages
 import Navbar from "./components/Navbar.jsx";
 import Footer from "./components/Footer.jsx";
-import ChatButton from "./components/ChatButton.jsx"; // 🌟 Floating chat
+import ChatButton from "./components/ChatButton.jsx";
+
+// Pages
 import Home from "./pages/Home.jsx";
 import Journal from "./pages/Journal.jsx";
 import Insights from "./pages/Insights.jsx";
@@ -24,7 +26,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const token = localStorage.getItem("token");
 
-  // ✅ Fetch user profile on mount if token exists
+  // Fetch user profile on mount if token exists
   useEffect(() => {
     const fetchUser = async () => {
       if (!token) {
@@ -39,7 +41,7 @@ export default function App() {
         setUser(res.data);
       } catch (err) {
         console.error("❌ Failed to fetch user:", err.response?.data?.message);
-        localStorage.removeItem("token"); // clear invalid token
+        localStorage.removeItem("token");
         setUser(null);
       } finally {
         setLoading(false);
@@ -48,13 +50,14 @@ export default function App() {
     fetchUser();
   }, [token]);
 
-  // ----------------- Protected Route -----------------
+  // Protected Route wrapper
   const ProtectedRoute = ({ children }) => {
-    if (loading) return (
-      <div className="text-center mt-20 text-gray-500 dark:text-gray-300">
-        ⏳ Loading...
-      </div>
-    );
+    if (loading)
+      return (
+        <div className="text-center mt-20 text-gray-500 dark:text-gray-300">
+          ⏳ Loading...
+        </div>
+      );
 
     if (!user) return <Navigate to="/login" replace />;
 
@@ -78,29 +81,41 @@ export default function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/topic/:id" element={<TopicDetail />} />
 
-                <Route path="/journal" element={
-                  <ProtectedRoute>
-                    <Journal />
-                  </ProtectedRoute>
-                } />
+                <Route
+                  path="/journal"
+                  element={
+                    <ProtectedRoute>
+                      <Journal />
+                    </ProtectedRoute>
+                  }
+                />
 
-                <Route path="/insights" element={
-                  <ProtectedRoute>
-                    <Insights />
-                  </ProtectedRoute>
-                } />
+                <Route
+                  path="/insights"
+                  element={
+                    <ProtectedRoute>
+                      <Insights user={user} />
+                    </ProtectedRoute>
+                  }
+                />
 
-                <Route path="/chat" element={
-                  <ProtectedRoute>
-                    <Chat />
-                  </ProtectedRoute>
-                } />
+                <Route
+                  path="/chat"
+                  element={
+                    <ProtectedRoute>
+                      <Chat />
+                    </ProtectedRoute>
+                  }
+                />
 
-                <Route path="/profile" element={
-                  <ProtectedRoute>
-                    <Profile user={user} setUser={setUser} />
-                  </ProtectedRoute>
-                } />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute>
+                      <Profile user={user} setUser={setUser} />
+                    </ProtectedRoute>
+                  }
+                />
 
                 <Route path="/login" element={<Login setUser={setUser} />} />
                 <Route path="/register" element={<Register setUser={setUser} />} />
@@ -110,7 +125,7 @@ export default function App() {
             {/* Footer */}
             <Footer />
 
-            {/* 🌟 Floating Chat Button */}
+            {/* Floating Chat Button */}
             {user && <ChatButton />}
           </div>
         </JournalProvider>

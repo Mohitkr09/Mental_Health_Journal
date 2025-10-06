@@ -1,10 +1,12 @@
 // src/pages/Journal.jsx
 import { useState, useEffect } from "react";
-import axios from "axios";
-import { useTheme } from "../context/ThemeContext.jsx"; 
+import { useNavigate } from "react-router-dom";
+import api from "../utils/api.js";
+import { useTheme } from "../context/ThemeContext.jsx";
 
 export default function Journal() {
   const { theme } = useTheme();
+  const navigate = useNavigate();
 
   const [text, setText] = useState("");
   const [mood, setMood] = useState("");
@@ -12,29 +14,30 @@ export default function Journal() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 🎮 Gamification
+  // Gamification
   const [streak, setStreak] = useState(0);
   const [badges, setBadges] = useState([]);
 
-  // 🔎 Filters
+  // Filters
   const [search, setSearch] = useState("");
   const [filterMood, setFilterMood] = useState("");
 
-  // Axios instance
-  const api = axios.create({
-    baseURL: "http://localhost:5000/api",
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-    },
-  });
-
+  // Fetch journals and user profile
   useEffect(() => {
     const fetchData = async () => {
-      try {
-        const journalRes = await api.get("/journal");
-        setJournals(journalRes.data);
+      const token = localStorage.getItem("token");
+      if (!token || token === "null") {
+        navigate("/login");
+        return;
+      }
 
-        const userRes = await api.get("/users/profile");
+      try {
+        const [journalRes, userRes] = await Promise.all([
+          api.get("/journal"),
+          api.get("/users/profile"),
+        ]);
+
+        setJournals(journalRes.data);
         setStreak(userRes.data.streak || 0);
         setBadges(userRes.data.badges || []);
       } catch (err) {
@@ -42,9 +45,11 @@ export default function Journal() {
         setError("⚠️ Failed to load journals. Please log in again.");
       }
     };
-    fetchData();
-  }, []);
 
+    fetchData();
+  }, [navigate]);
+
+  // Create new journal entry
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -53,7 +58,6 @@ export default function Journal() {
     try {
       const res = await api.post("/journal", { text, mood });
       setJournals([res.data.journal, ...journals]);
-
       if (res.data.streak !== undefined) setStreak(res.data.streak);
       if (res.data.badges) setBadges(res.data.badges);
 
@@ -67,24 +71,29 @@ export default function Journal() {
     }
   };
 
+  // Edit entry
   const handleEdit = async (id, updatedText) => {
     try {
       const res = await api.put(`/journal/${id}`, { text: updatedText });
       setJournals(journals.map(j => j._id === id ? res.data.journal : j));
     } catch (err) {
       console.error("Error editing entry:", err);
+      setError("⚠️ Failed to update entry.");
     }
   };
 
+  // Delete entry
   const handleDelete = async (id) => {
     try {
       await api.delete(`/journal/${id}`);
       setJournals(journals.filter(j => j._id !== id));
     } catch (err) {
       console.error("Error deleting entry:", err);
+      setError("⚠️ Failed to delete entry.");
     }
   };
 
+  // Group entries by date
   const groupedEntries = journals.reduce((acc, entry) => {
     const date = new Date(entry.createdAt).toLocaleDateString();
     if (!acc[date]) acc[date] = [];
@@ -108,7 +117,7 @@ export default function Journal() {
     { value: "neutral", label: "😐 Neutral" },
   ];
 
-  // ✅ Theme-based classes
+  // Theme classes
   const pageBg = theme === "dark" ? "bg-gray-900" : "bg-purple-50";
   const cardBg = theme === "dark" ? "bg-gray-800" : "bg-white";
   const textColor = theme === "dark" ? "text-gray-200" : "text-gray-900";
@@ -123,7 +132,7 @@ export default function Journal() {
     <div className={`${pageBg} p-6 min-h-screen transition-colors duration-300`}>
       <h1 className={`text-2xl font-bold mb-4 ${textColor}`}>My Journal</h1>
 
-      {/* 🎮 Gamification */}
+      {/* Gamification */}
       <div className={`${cardBg} ${borderColor} mb-6 p-4 border rounded-lg transition-colors duration-300`}>
         <p className={`text-lg font-semibold ${textColor}`}>🔥 Streak: {streak} days</p>
         <div className="flex gap-2 mt-2 flex-wrap">
@@ -179,7 +188,7 @@ export default function Journal() {
         {error && <p className="text-red-500 mt-2">{error}</p>}
       </form>
 
-      {/* 🔎 Filters */}
+      {/* Filters */}
       <div className="mb-6 flex gap-4 flex-wrap items-center">
         <input
           type="text"

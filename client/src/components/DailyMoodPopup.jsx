@@ -1,12 +1,15 @@
 // src/components/DailyMoodPopup.jsx
 import { useState, useEffect } from "react";
-import axios from "axios";
-import { useJournal } from "../context/JournalContext.jsx"; // ✅ use context
+import api from "../utils/api.js";
+import { useJournal } from "../context/JournalContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx"; // ✅ import AuthContext
 
 export default function DailyMoodPopup() {
+  const { user } = useAuth(); // ✅ no more props
   const [isOpen, setIsOpen] = useState(false);
   const [mood, setMood] = useState("");
-  const { addEntry } = useJournal(); // ✅ context function to update entries
+  const [loading, setLoading] = useState(false);
+  const { addEntry } = useJournal();
 
   const COLORS = {
     happy: "#4ade80",
@@ -26,33 +29,35 @@ export default function DailyMoodPopup() {
     tired: "🥱",
   };
 
-  // ✅ Show popup only once per day
+  // ✅ Show popup once per day only if user is logged in
   useEffect(() => {
+    if (!user) return;
+
     const lastPopup = localStorage.getItem("lastPopupDate");
     const today = new Date().toDateString();
     if (lastPopup !== today) setIsOpen(true);
-  }, []);
+  }, [user]);
 
   const handleSave = async () => {
     if (!mood) return alert("Please select a mood");
+    if (!user) return alert("Please log in to save your mood");
 
+    setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.post(
-        "http://localhost:5000/api/journal",
-        { text: `Daily quick log: feeling ${mood}`, mood, date: new Date().toISOString() },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await api.post("/journal", {
+        text: `Daily quick log: feeling ${mood}`,
+        mood,
+        date: new Date().toISOString(),
+      });
 
-      // ✅ Update context so graphs auto-refresh
-      addEntry(res.data);
-
-      // ✅ Mark today's popup as done
+      addEntry(res.data); // ✅ update JournalContext
       localStorage.setItem("lastPopupDate", new Date().toDateString());
       setIsOpen(false);
     } catch (err) {
       console.error("Error saving mood:", err);
-      alert("Failed to save mood.");
+      alert(err.response?.data?.message || "Failed to save mood.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -61,20 +66,26 @@ export default function DailyMoodPopup() {
     setIsOpen(false);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !user) return null;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-xl shadow-lg w-96 text-center">
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-lg w-96 text-center transition-colors duration-300">
         <h2 className="text-lg font-semibold mb-3">🌞 How are you feeling today?</h2>
 
         <div className="flex flex-wrap justify-center gap-2 mb-4">
           {Object.keys(COLORS).map((m) => (
             <button
               key={m}
-              className={`px-3 py-2 rounded ${mood === m ? "ring-2 ring-purple-500" : ""}`}
+              type="button"
+              aria-label={m}
+              className={`px-3 py-2 rounded transition-transform duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                mood === m ? "ring-2 ring-purple-500 scale-105" : "hover:scale-105"
+              }`}
               style={{ backgroundColor: COLORS[m], color: "#fff" }}
               onClick={() => setMood(m)}
+              title={m}
+              disabled={loading}
             >
               {moodEmojis[m]} {m}
             </button>
@@ -82,11 +93,21 @@ export default function DailyMoodPopup() {
         </div>
 
         <div className="flex justify-end gap-2">
-          <button className="px-4 py-2 bg-gray-200 rounded" onClick={handleSkip}>
+          <button
+            type="button"
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors duration-200"
+            onClick={handleSkip}
+            disabled={loading}
+          >
             Skip
           </button>
-          <button className="px-4 py-2 bg-purple-600 text-white rounded" onClick={handleSave}>
-            Save
+          <button
+            type="button"
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors duration-200 disabled:opacity-60"
+            onClick={handleSave}
+            disabled={loading}
+          >
+            {loading ? "Saving..." : "Save"}
           </button>
         </div>
       </div>

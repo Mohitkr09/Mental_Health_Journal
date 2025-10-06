@@ -1,58 +1,55 @@
 // src/context/JournalContext.jsx
 import { createContext, useContext, useState, useEffect } from "react";
-import axios from "axios";
+import api from "../utils/api.js";
+import { useAuth } from "./AuthContext.jsx";
 
 const JournalContext = createContext();
-
 export const useJournal = () => useContext(JournalContext);
 
 export const JournalProvider = ({ children }) => {
+  const { user, loading: authLoading } = useAuth(); // get user & auth loading
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  // Fetch entries from backend
+  // Fetch journal entries from backend
   const fetchEntries = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || !user) {
+      console.warn("⚠️ No token found or user not logged in, skipping journal fetch");
+      setEntries([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     try {
-      setLoading(true);
-      const token = localStorage.getItem("token");
-      if (!token) return;
-      const res = await axios.get("http://localhost:5000/api/journal", {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await api.get("/journal", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
       setEntries(res.data);
     } catch (err) {
-      console.error("Error fetching journal entries:", err);
-      setError(err.response?.data?.error || err.message);
+      console.error("Error fetching journal entries:", err.response?.data?.message || err);
+      setEntries([]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchEntries();
-  }, []);
-
-  // Add a new entry to context
+  // Add a new journal entry
   const addEntry = (entry) => {
     setEntries((prev) => [entry, ...prev]);
   };
 
-  // Optionally, a function to refresh entries manually
-  const refreshEntries = () => {
-    fetchEntries();
-  };
+  // Automatically fetch entries when user logs in or changes
+  useEffect(() => {
+    if (!authLoading && user) fetchEntries();
+    if (!user) setEntries([]);
+  }, [user, authLoading]);
 
   return (
-    <JournalContext.Provider
-      value={{
-        entries,
-        loading,
-        error,
-        addEntry,
-        refreshEntries,
-      }}
-    >
+    <JournalContext.Provider value={{ entries, loading, fetchEntries, addEntry }}>
       {children}
     </JournalContext.Provider>
   );

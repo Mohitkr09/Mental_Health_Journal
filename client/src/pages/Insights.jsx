@@ -1,5 +1,6 @@
 // src/pages/Insights.jsx
-import { useEffect, useState } from "react";
+import { useJournal } from "../context/JournalContext.jsx";
+import { useTheme } from "../context/ThemeContext.jsx";
 import {
   LineChart,
   Line,
@@ -12,14 +13,10 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { useJournal } from "../context/JournalContext.jsx";
-import { useTheme } from "../context/ThemeContext.jsx";
 
 export default function Insights() {
-  const { entries } = useJournal();
+  const { entries, loading: contextLoading, error: contextError } = useJournal();
   const { theme } = useTheme();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   const COLORS = {
     happy: "#4ade80",
@@ -39,39 +36,43 @@ export default function Insights() {
     happy: 6,
   };
 
-  // Prepare line chart data
-  const lineData =
-    entries && entries.length
-      ? entries
-          .map((item) => ({
-            date: new Date(item.date || item.createdAt).toLocaleDateString(),
-            moodValue: moodScale[item.mood] || 0,
-            moodLabel: item.mood || "neutral",
-          }))
-          .sort((a, b) => new Date(a.date) - new Date(b.date))
-      : [{ date: "No Data", moodValue: 0, moodLabel: "neutral" }];
+  // ✅ Only consider entries logged via DailyMoodPopup
+  const moodEntries = entries.filter((e) => e.text?.startsWith("Daily quick log:"));
 
-  // Prepare pie chart data
-  const moodCounts = entries.reduce((acc, item) => {
+  // Prepare data for line chart (date vs mood)
+  const lineData = moodEntries.length
+    ? moodEntries
+        .map((item) => ({
+          date: new Date(item.date || item.createdAt).toLocaleDateString(),
+          moodValue: moodScale[item.mood] || 0,
+          moodLabel: item.mood || "neutral",
+        }))
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+    : [];
+
+  // Prepare data for pie chart (mood distribution)
+  const moodCounts = moodEntries.reduce((acc, item) => {
     acc[item.mood] = (acc[item.mood] || 0) + 1;
     return acc;
   }, {});
 
+  const totalMoods = moodEntries.length;
   const pieData =
-    Object.keys(moodCounts).length > 0
-      ? Object.keys(moodCounts).map((m) => ({ name: m, value: moodCounts[m] }))
-      : [{ name: "No Data", value: 1 }];
+    totalMoods > 0
+      ? Object.keys(moodCounts).map((m) => ({
+          name: m,
+          value: ((moodCounts[m] / totalMoods) * 100).toFixed(1), // percentage
+        }))
+      : [];
 
-  // Chart theme colors
   const chartBg = theme === "dark" ? "#1f2937" : "#ffffff";
   const textColor = theme === "dark" ? "#f3f4f6" : "#111827";
   const gridColor = theme === "dark" ? "#374151" : "#e5e7eb";
 
-  useEffect(() => setLoading(false), []);
-
-  if (loading)
+  if (contextLoading)
     return <p className="text-center text-gray-500 mt-8">⏳ Loading insights...</p>;
-  if (error) return <p className="text-center text-red-500 mt-8">{error}</p>;
+  if (contextError)
+    return <p className="text-center text-red-500 mt-8">{contextError}</p>;
 
   return (
     <div
@@ -87,15 +88,12 @@ export default function Insights() {
         📊 Mood Insights
       </h2>
 
-      {/* === Line Chart === */}
+      {/* Line Chart: Mood vs Date */}
       <div
         className="p-6 rounded-xl shadow-md mb-10 transition-colors duration-300"
         style={{ backgroundColor: chartBg, minHeight: 350 }}
       >
-        <h3
-          className="text-lg font-semibold mb-4 transition-colors duration-300"
-          style={{ color: textColor }}
-        >
+        <h3 className="text-lg font-semibold mb-4" style={{ color: textColor }}>
           Mood Over Time
         </h3>
         <div style={{ width: "100%", height: 300 }}>
@@ -104,17 +102,17 @@ export default function Insights() {
               <CartesianGrid stroke={gridColor} strokeDasharray="3 3" />
               <XAxis dataKey="date" stroke={textColor} />
               <YAxis
-                domain={[0, 6]}
+                domain={[1, 6]}
                 ticks={[1, 2, 3, 4, 5, 6]}
                 stroke={textColor}
                 tickFormatter={(val) =>
-                  Object.keys(moodScale).find((k) => moodScale[k] === val)
+                  Object.keys(moodScale).find((key) => moodScale[key] === val)
                 }
               />
               <Tooltip
                 contentStyle={{ backgroundColor: chartBg, color: textColor }}
                 formatter={(val) =>
-                  Object.keys(moodScale).find((k) => moodScale[k] === val)
+                  Object.keys(moodScale).find((key) => moodScale[key] === val)
                 }
               />
               <Line
@@ -129,15 +127,12 @@ export default function Insights() {
         </div>
       </div>
 
-      {/* === Pie Chart === */}
+      {/* Pie Chart: Mood Distribution */}
       <div
         className="p-6 rounded-xl shadow-md transition-colors duration-300"
         style={{ backgroundColor: chartBg, minHeight: 350 }}
       >
-        <h3
-          className="text-lg font-semibold mb-4 transition-colors duration-300"
-          style={{ color: textColor }}
-        >
+        <h3 className="text-lg font-semibold mb-4" style={{ color: textColor }}>
           Mood Distribution
         </h3>
         <div style={{ width: "100%", height: 300 }}>
@@ -149,12 +144,10 @@ export default function Insights() {
                 cy="50%"
                 outerRadius={100}
                 dataKey="value"
-                label={({ name, percent }) =>
-                  `${name} ${(percent * 100).toFixed(0)}%`
-                }
+                label={({ name, value }) => `${name} ${value}%`}
               >
-                {pieData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[entry.name] || "#a3a3a3"} />
+                {pieData.map((entry, idx) => (
+                  <Cell key={`cell-${idx}`} fill={COLORS[entry.name] || "#a3a3a3"} />
                 ))}
               </Pie>
               <Tooltip contentStyle={{ backgroundColor: chartBg, color: textColor }} />

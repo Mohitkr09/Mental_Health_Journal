@@ -1,31 +1,60 @@
 // src/context/AuthContext.jsx
-import { createContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
+import api from "../utils/api.js";
 
-export const Authcontext = createContext();
+const AuthContext = createContext();
+export const useAuth = () => useContext(AuthContext);
 
-export default function AuthProvider({ children }) {
+export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true); // track initial fetch
 
+  // Fetch user on mount if token exists
   useEffect(() => {
-    const saved = localStorage.getItem("user");
-    if (saved) setUser(JSON.parse(saved));
+    const fetchUser = async () => {
+      const token = localStorage.getItem("token");
+      if (!token || token === "null") {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await api.get("/users/profile"); // must match your backend
+        setUser(res.data);
+      } catch (err) {
+        console.error("Error fetching user:", err);
+        localStorage.removeItem("token");
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUser();
   }, []);
 
-  const login = (userData, token) => {
-    setUser(userData);
-    localStorage.setItem("user", JSON.stringify(userData));
-    localStorage.setItem("token", token);
+  const login = async (email, password) => {
+    const res = await api.post("/auth/login", { email, password });
+    localStorage.setItem("token", res.data.token);
+    setUser(res.data.user);
+    return res.data;
+  };
+
+  const register = async (name, email, password) => {
+    const res = await api.post("/auth/register", { name, email, password });
+    localStorage.setItem("token", res.data.token);
+    setUser(res.data.user);
+    return res.data;
   };
 
   const logout = () => {
-    setUser(null);
-    localStorage.removeItem("user");
     localStorage.removeItem("token");
+    setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
-}
+};
