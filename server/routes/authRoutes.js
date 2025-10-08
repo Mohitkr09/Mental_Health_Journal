@@ -4,7 +4,12 @@ import {
   loginUser,
   getUserProfile,
   updateUserProfile,
-  toggleTheme,   // ✅ import toggle theme
+  toggleTheme,
+  getMindMap,     // ✅ Mind Map controller
+  saveMindMap,    // ✅ Mind Map controller
+  shareCommunityPost,   // ✅ Community feature
+  getCommunityPosts,    // ✅ Community feature
+  reactCommunityPost    // ✅ Community feature
 } from "../controllers/AuthController.js";
 import { protect } from "../middleware/authmiddleware.js";
 import parser from "../middleware/upload.js";
@@ -14,13 +19,13 @@ import cloudinary from "../config/cloudinary.js";
 const router = express.Router();
 
 // ==================== AUTH ====================
-router.post("/register", registerUser);   // ✅ Register + Send welcome email
+router.post("/register", registerUser);
 router.post("/login", loginUser);
 
 // ==================== USER PROFILE ====================
 router.get("/profile", protect, getUserProfile);
 router.put("/profile", protect, updateUserProfile);
-router.put("/theme", protect, toggleTheme); // ✅ toggle theme route
+router.put("/theme", protect, toggleTheme);
 
 // ==================== AVATAR UPLOAD ====================
 router.post("/avatar", protect, parser.single("avatar"), async (req, res) => {
@@ -29,7 +34,7 @@ router.post("/avatar", protect, parser.single("avatar"), async (req, res) => {
 
     const user = await User.findById(req.user._id);
 
-    // ✅ delete old avatar from Cloudinary if exists
+    // Delete old avatar from Cloudinary if exists
     if (user.avatar) {
       try {
         const publicId = user.avatar.split("/").slice(-2).join("/").split(".")[0];
@@ -39,7 +44,7 @@ router.post("/avatar", protect, parser.single("avatar"), async (req, res) => {
       }
     }
 
-    // ✅ save new avatar
+    // Save new avatar
     user.avatar = req.file.path;
     await user.save();
 
@@ -49,5 +54,14 @@ router.post("/avatar", protect, parser.single("avatar"), async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
+
+// ==================== MIND MAP ====================
+router.get("/mindmap", protect, getMindMap);   // ✅ get Mind Map
+router.post("/mindmap", protect, saveMindMap); // ✅ save/update Mind Map
+
+// ==================== COMMUNITY SHARING ====================
+router.post("/community/share", protect, shareCommunityPost); // Share anonymously
+router.get("/community/posts", protect, getCommunityPosts);   // Fetch community posts
+router.post("/community/react", protect, reactCommunityPost); // React 💬 / ❤️
 
 export default router;

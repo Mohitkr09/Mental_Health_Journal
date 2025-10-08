@@ -1,56 +1,59 @@
 // src/context/JournalContext.jsx
 import { createContext, useContext, useState, useEffect } from "react";
-import api from "../utils/api.js";
-import { useAuth } from "./AuthContext.jsx";
+import api from "../utils/api.js"; // ✅ use your configured Axios instance
 
 const JournalContext = createContext();
-export const useJournal = () => useContext(JournalContext);
 
-export const JournalProvider = ({ children }) => {
-  const { user, loading: authLoading } = useAuth(); // get user & auth loading
+export function JournalProvider({ children }) {
   const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Fetch journal entries from backend
+  // 🔹 Fetch all journal entries
   const fetchEntries = async () => {
-    const token = localStorage.getItem("token");
-    if (!token || !user) {
-      console.warn("⚠️ No token found or user not logged in, skipping journal fetch");
-      setEntries([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     try {
-      const res = await api.get("/journal", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      setEntries(res.data);
+      const res = await api.get("/journal"); // ✅ uses baseURL http://localhost:5000/api
+      setEntries(Array.isArray(res.data) ? res.data : []); // ✅ ensure array
     } catch (err) {
-      console.error("Error fetching journal entries:", err.response?.data?.message || err);
-      setEntries([]);
+      console.error("Error fetching journals:", err);
+      setError("Failed to load journal entries");
     } finally {
       setLoading(false);
     }
   };
 
-  // Add a new journal entry
-  const addEntry = (entry) => {
-    setEntries((prev) => [entry, ...prev]);
+  // 🧠 Fetch on mount
+  useEffect(() => {
+    fetchEntries();
+  }, []);
+
+  // 📝 Add new journal entry and auto-update everywhere
+  const addEntry = async (newEntry) => {
+    try {
+      const res = await api.post("/journal", newEntry); // ✅ fixed here
+      const savedEntry = res.data || newEntry;
+      setEntries((prev) => [...prev, savedEntry]); // ✅ immediate context update
+      return savedEntry;
+    } catch (err) {
+      console.error("❌ Error adding entry:", err);
+      throw err;
+    }
   };
 
-  // Automatically fetch entries when user logs in or changes
+  // ♻️ Optional: auto-refresh entries every 10s
   useEffect(() => {
-    if (!authLoading && user) fetchEntries();
-    if (!user) setEntries([]);
-  }, [user, authLoading]);
+    const sync = setInterval(fetchEntries, 10000);
+    return () => clearInterval(sync);
+  }, []);
 
   return (
-    <JournalContext.Provider value={{ entries, loading, fetchEntries, addEntry }}>
+    <JournalContext.Provider
+      value={{ entries, setEntries, addEntry, fetchEntries, loading, error }}
+    >
       {children}
     </JournalContext.Provider>
   );
-};
+}
+
+export const useJournal = () => useContext(JournalContext);

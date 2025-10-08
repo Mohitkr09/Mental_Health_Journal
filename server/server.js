@@ -10,7 +10,7 @@ import path from "path";
 // Import routes
 import journalRoutes from "./routes/journalRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
-import authRoutes from "./routes/authRoutes.js";
+import authRoutes from "./routes/authRoutes.js"; // ✅ Auth + Community
 import userRoutes from "./routes/userRoutes.js";
 
 // 📌 Import Reminder Service
@@ -44,13 +44,12 @@ mongoose
   });
 
 // ====== Serve Static Files for Cloudinary Local Fallback (Optional) ======
-// Not needed if using Cloudinary URLs directly
 // app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // ====== API Routes ======
 app.use("/api/journal", journalRoutes);
 app.use("/api/chat", chatRoutes);
-app.use("/api/auth", authRoutes); // login/register
+app.use("/api/auth", authRoutes); // login/register + mindmap + community
 app.use("/api/users", userRoutes); // profile, avatar upload, update
 
 // ====== Health Check ======
