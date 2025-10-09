@@ -5,7 +5,7 @@ import {
   getUserProfile,
   updateUserProfile,
   toggleTheme,
-  getMindMap,     // ✅ Mind Map controller
+  getMindMap,     
   saveMindMap,    // ✅ Mind Map controller
   shareCommunityPost,   // ✅ Community feature
   getCommunityPosts,    // ✅ Community feature
