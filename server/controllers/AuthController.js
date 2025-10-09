@@ -230,12 +230,23 @@ export const getCommunityPosts = async (req, res) => {
 export const reactCommunityPost = async (req, res) => {
   try {
     const { postId, type } = req.body;
-    const updateField = type === "like" ? { likes: 1 } : { relations: 1 };
 
-    await CommunityPost.findByIdAndUpdate(postId, { $inc: updateField });
-    res.json({ success: true });
+    // Decide which nested field to increment
+    const field =
+      type === "support" ? "likes.support" :
+      type === "relate" ? "likes.relate" :
+      null;
+
+    if (!field) {
+      return res.status(400).json({ message: "Invalid reaction type" });
+    }
+
+    await CommunityPost.findByIdAndUpdate(postId, { $inc: { [field]: 1 } });
+
+    res.json({ success: true, type });
   } catch (error) {
     console.error("❌ React post error:", error.message);
     res.status(500).json({ message: "Server error" });
   }
 };
+
