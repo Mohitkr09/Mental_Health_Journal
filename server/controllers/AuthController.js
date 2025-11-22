@@ -1,34 +1,45 @@
+import mongoose from "mongoose";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import jwt from "jsonwebtoken";
+import { v4 as uuidv4 } from "uuid";
+import { execSync, spawnSync } from "child_process";
+import ffmpeg from "fluent-ffmpeg";
+
 import User from "../models/user.js";
 import MindMap from "../models/mindMap.js";
-import CommunityPost from "../models/CommunityPost.js"; // ✅ New model for community posts
-import jwt from "jsonwebtoken";
+import CommunityPost from "../models/CommunityPost.js";
 import transporter from "../utils/email.js";
-import { v4 as uuidv4 } from "uuid";
 
-// 🔐 Generate JWT
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
-};
+// ✅ Set FFmpeg path for your system
+ffmpeg.setFfmpegPath(
+  "C:\\Users\\hp\\Downloads\\ffmpeg-8.0-essentials_build\\ffmpeg-8.0-essentials_build\\bin\\ffmpeg.exe"
+);
+
+// ---------------- JWT ----------------
+const generateToken = (id) =>
+  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
 
 // ---------------- REGISTER ----------------
 export const registerUser = async (req, res) => {
   try {
     const { name, email, password, avatar, theme } = req.body;
-
     const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    if (existingUser)
       return res.status(400).json({ message: "User already exists" });
-    }
 
     const user = await User.create({
       name,
       email,
       password,
       avatar: avatar || "",
-      theme: theme && ["light", "dark", "system"].includes(theme) ? theme : "light",
+      theme:
+        theme && ["light", "dark", "system"].includes(theme)
+          ? theme
+          : "light",
     });
 
-    // Send Welcome Email
     try {
       await transporter.sendMail({
         from: `"MindCare" <${process.env.EMAIL_USER}>`,
@@ -38,8 +49,7 @@ export const registerUser = async (req, res) => {
           <h2>Hi ${user.name},</h2>
           <p>Welcome to <b>MindCare</b> ✨</p>
           <p>Start journaling today and track your mood daily.</p>
-          <br/>
-          <a href="${process.env.CLIENT_URL}/login" 
+          <a href="${process.env.CLIENT_URL}/login"
              style="padding:10px 20px;background:#6D28D9;color:#fff;text-decoration:none;border-radius:6px;">
             Login Now
           </a>
@@ -48,9 +58,8 @@ export const registerUser = async (req, res) => {
           </p>
         `,
       });
-      console.log(`📧 Welcome email sent to ${user.email}`);
     } catch (mailErr) {
-      console.error("❌ Email send error:", mailErr.message);
+      console.warn("⚠️ Email send error:", mailErr.message);
     }
 
     res.status(201).json({
@@ -72,9 +81,8 @@ export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
-    if (!user || !(await user.matchPassword(password))) {
+    if (!user || !(await user.matchPassword(password)))
       return res.status(401).json({ message: "Invalid email or password" });
-    }
 
     res.json({
       _id: user._id,
@@ -102,7 +110,6 @@ export const getUserProfile = async (req, res) => {
   }
 };
 
-// ---------------- UPDATE PROFILE ----------------
 export const updateUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -114,7 +121,6 @@ export const updateUserProfile = async (req, res) => {
     if (req.body.password) user.password = req.body.password;
 
     const updatedUser = await user.save();
-
     res.json({
       _id: updatedUser._id,
       name: updatedUser.name,
@@ -145,14 +151,14 @@ export const toggleTheme = async (req, res) => {
   }
 };
 
-// ---------------- MIND MAP CONTROLLERS ----------------
+// ---------------- MIND MAP ----------------
 export const getMindMap = async (req, res) => {
   try {
     const mindMap = await MindMap.findOne({ user: req.user._id });
     if (!mindMap) return res.status(200).json({ nodes: [], edges: [] });
     res.json(mindMap);
   } catch (error) {
-    console.error("❌ Get Mind Map error:", error.message);
+    console.error("❌ Get Mind Map error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -172,26 +178,23 @@ export const saveMindMap = async (req, res) => {
 
     res.status(200).json({ message: "Mind Map saved successfully", mindMap });
   } catch (error) {
-    console.error("❌ Save Mind Map error:", error.message);
+    console.error("❌ Save Mind Map error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// ---------------- COMMUNITY SHARING ----------------
-
-// Filter sensitive data
+// ---------------- COMMUNITY POSTS ----------------
 const filterSensitiveData = (text) => {
   const patterns = [
-    /\b[A-Z][a-z]+ [A-Z][a-z]+\b/g,  // Names
-    /\b\d{10}\b/g,                   // Phone numbers
-    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}\b/gi // Emails
+    /\b[A-Z][a-z]+ [A-Z][a-z]+\b/g,
+    /\b\d{10}\b/g,
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}\b/gi,
   ];
   let cleanText = text;
-  patterns.forEach((p) => { cleanText = cleanText.replace(p, "[REDACTED]"); });
+  patterns.forEach((p) => (cleanText = cleanText.replace(p, "[REDACTED]")));
   return cleanText;
 };
 
-// Share anonymously
 export const shareCommunityPost = async (req, res) => {
   try {
     const { text, mood } = req.body;
@@ -201,52 +204,183 @@ export const shareCommunityPost = async (req, res) => {
       text: filterSensitiveData(text),
       mood: mood || "neutral",
       date: new Date(),
-      likes: 0,
-      relations: 0,
+      likes: { support: 0, relate: 0 },
       anonymous_id: uuidv4(),
     });
 
     res.status(201).json(post);
   } catch (error) {
-    console.error("❌ Share post error:", error.message);
+    console.error("❌ Share post error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Fetch latest community posts
 export const getCommunityPosts = async (req, res) => {
   try {
-    const posts = await CommunityPost.find({})
-      .sort({ date: -1 })
-      .limit(50);
+    const posts = await CommunityPost.find({}).sort({ date: -1 }).limit(50);
     res.json(posts);
   } catch (error) {
-    console.error("❌ Get posts error:", error.message);
+    console.error("❌ Get posts error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// React to a post
 export const reactCommunityPost = async (req, res) => {
   try {
     const { postId, type } = req.body;
-
-    // Decide which nested field to increment
     const field =
-      type === "support" ? "likes.support" :
-      type === "relate" ? "likes.relate" :
-      null;
-
-    if (!field) {
-      return res.status(400).json({ message: "Invalid reaction type" });
-    }
+      type === "support" ? "likes.support" : type === "relate" ? "likes.relate" : null;
+    if (!field) return res.status(400).json({ message: "Invalid reaction type" });
 
     await CommunityPost.findByIdAndUpdate(postId, { $inc: { [field]: 1 } });
-
     res.json({ success: true, type });
   } catch (error) {
-    console.error("❌ React post error:", error.message);
+    console.error("❌ React post error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
+export const editCommunityPost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ message: "Text is required" });
+
+    const post = await CommunityPost.findById(id);
+    if (!post) return res.status(404).json({ message: "Post not found" });
+
+    post.text = filterSensitiveData(text);
+    await post.save();
+    res.json(post);
+  } catch (error) {
+    console.error("❌ Edit post error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const deleteCommunityPost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const post = await CommunityPost.findById(id);
+    if (!post) return res.status(404).json({ message: "Post not found" });
+
+    await post.deleteOne();
+    res.json({ message: "Post deleted successfully", postId: id });
+  } catch (error) {
+    console.error("❌ Delete post error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const voiceTranscribe = async (req, res) => {
+  try {
+    if (!req.file) {
+      console.error("❌ No audio file received.");
+      return res.status(400).json({ error: "No audio file uploaded" });
+    }
+
+    console.log("🎤 Received file:", {
+      fieldname: req.file.fieldname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+    });
+
+    // 🧩 Save the file temporarily
+    const tempWebm = path.join(os.tmpdir(), `audio-${Date.now()}.webm`);
+    fs.writeFileSync(tempWebm, req.file.buffer);
+
+    // 🧠 Confirm ffmpeg path
+    const ffmpegPath =
+      "C:\\Users\\hp\\Downloads\\ffmpeg-8.0-essentials_build\\ffmpeg-8.0-essentials_build\\bin\\ffmpeg.exe";
+    if (!fs.existsSync(ffmpegPath)) {
+      console.error("❌ FFmpeg not found at path:", ffmpegPath);
+      return res.status(500).json({ error: "FFmpeg not found" });
+    }
+
+    // 🎧 Convert webm → wav
+    const tempWav = path.join(os.tmpdir(), `audio-${Date.now()}.wav`);
+    const cmd = `"${ffmpegPath}" -y -i "${tempWebm}" -ar 16000 -ac 1 -c:a pcm_s16le "${tempWav}"`;
+
+    console.log("🔁 Converting with FFmpeg...");
+    try {
+      execSync(cmd, { stdio: "pipe" });
+      console.log("✅ Conversion complete:", tempWav);
+    } catch (err) {
+      console.error("❌ FFmpeg conversion failed:", err.message);
+      return res.status(500).json({ error: "FFmpeg conversion failed" });
+    }
+
+    // 📜 Whisper transcription
+    console.log("🧠 Sending to Whisper...");
+    const transcription = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(tempWav),
+      model: "whisper-1",
+      response_format: "json",
+    });
+
+    console.log("✅ Transcription result:", transcription.text);
+
+    // 🧹 Cleanup
+    fs.unlinkSync(tempWebm);
+    fs.unlinkSync(tempWav);
+
+    if (!transcription.text || !transcription.text.trim()) {
+      return res.json({ text: "No text detected" });
+    }
+
+    res.json({ text: transcription.text.trim() });
+  } catch (error) {
+    console.error("🔥 Transcription error:", error);
+    res.status(500).json({
+      error: "Transcription failed",
+      details: error.message || "Unknown error",
+    });
+  }
+};
+
+// ---------------- CHAT (Python AI) ----------------
+export const chatHandler = async (req, res) => {
+  try {
+    const { message, history = [] } = req.body;
+    if (!message) return res.status(400).json({ message: "Message is required" });
+
+    console.log("💬 Incoming message:", message);
+
+    // 🧠 Run local Python AI script
+    const pythonPath = path.join(process.cwd(), "server", "python", "chat.py");
+    const result = spawnSync("python", [pythonPath, message], { encoding: "utf-8" });
+
+    if (result.error) {
+      console.error("❌ Python AI Error:", result.error.message);
+      return res.status(500).json({
+        reply: "Python AI failed to respond.",
+        error: result.error.message,
+      });
+    }
+
+    const aiReply = result.stdout.trim() || "No response from Python AI.";
+    res.json({ reply: aiReply });
+  } catch (err) {
+    console.error("❌ Chat error:", err.message);
+    res.status(500).json({
+      reply: "AI service unavailable. Please try later.",
+      error: err.message,
+    });
+  }
+};
+
+// ---------------- MOOD ENTRIES ----------------
+export const getMoodEntries = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { mood } = req.query;
+    const query = { user: userId };
+    if (mood && mood !== "all") query.mood = mood;
+
+    const entries = await MindMap.find(query).sort({ date: 1 });
+    res.status(200).json(entries);
+  } catch (error) {
+    console.error("❌ Get mood entries error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};

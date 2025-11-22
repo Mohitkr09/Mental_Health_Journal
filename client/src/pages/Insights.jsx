@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useJournal } from "../context/JournalContext.jsx";
 import { useTheme } from "../context/ThemeContext.jsx";
 import axios from "axios";
@@ -14,17 +14,36 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import { Loader2, Heart, HandHelping, Send } from "lucide-react";
+import {
+  Loader2,
+  Heart,
+  HandHelping,
+  Send,
+  Mic,
+  Play,
+  StopCircle,
+  Edit3,
+  Trash2,
+} from "lucide-react";
 
 export default function Insights() {
   const { entries, loading: contextLoading, error: contextError } = useJournal();
   const { theme } = useTheme();
 
-  // ===== Community Wall State =====
   const [communityPosts, setCommunityPosts] = useState([]);
   const [newPost, setNewPost] = useState("");
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [editingPostId, setEditingPostId] = useState(null);
+  const [editingText, setEditingText] = useState("");
+
+  const [recording, setRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const audioRef = useRef(null);
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
   const token = localStorage.getItem("token");
@@ -38,7 +57,10 @@ export default function Insights() {
       });
       if (Array.isArray(res.data)) {
         setCommunityPosts(
-          res.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          res.data.sort(
+            (a, b) =>
+              new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt)
+          )
         );
       }
     } catch (err) {
@@ -55,13 +77,14 @@ export default function Insights() {
   }, []);
 
   // ===== Handle Posting =====
-  const handlePost = async () => {
-    if (!newPost.trim()) return;
+  const handlePost = async (textOverride = null) => {
+    const content = textOverride || newPost.trim();
+    if (!content) return;
     setPosting(true);
     try {
       const res = await axios.post(
         `${API_BASE_URL}/api/auth/community/share`,
-        { text: newPost.trim(), mood: "neutral" },
+        { text: content, mood: "neutral" },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data) {
@@ -70,18 +93,25 @@ export default function Insights() {
       }
     } catch (err) {
       console.error("Error posting:", err);
+      alert("Failed to post. Try again.");
     } finally {
       setPosting(false);
     }
   };
 
-  // ===== Handle React (Support / Relate) =====
+  // ===== React to Post =====
   const handleReact = async (postId, type) => {
     try {
       setCommunityPosts((prev) =>
         prev.map((post) =>
           post._id === postId
-            ? { ...post, likes: { ...post.likes, [type]: (post.likes?.[type] || 0) + 1 } }
+            ? {
+                ...post,
+                likes: {
+                  ...post.likes,
+                  [type]: (post.likes?.[type] || 0) + 1,
+                },
+              }
             : post
         )
       );
@@ -95,16 +125,128 @@ export default function Insights() {
     }
   };
 
-  // ===== Mood Graph Logic =====
-  const moodScale = {
-    sad: 1,
-    tired: 2,
-    neutral: 3,
-    anxious: 4,
-    angry: 5,
-    happy: 6,
+  // ===== Edit Post =====
+  const saveEdit = async (postId) => {
+    if (!editingText.trim()) return;
+    try {
+      const res = await axios.put(
+        `${API_BASE_URL}/api/auth/community/posts/${postId}`,
+        { text: editingText.trim() },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setCommunityPosts((prev) =>
+        prev.map((p) => (p._id === postId ? res.data : p))
+      );
+      setEditingPostId(null);
+      setEditingText("");
+    } catch (err) {
+      console.error("Edit error:", err);
+      alert("Failed to save edit.");
+    }
   };
 
+  // ===== Delete Post =====
+  const deletePost = async (postId) => {
+    if (!confirm("Are you sure you want to delete this post?")) return;
+    try {
+      await axios.delete(`${API_BASE_URL}/api/auth/community/posts/${postId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setCommunityPosts((prev) => prev.filter((p) => p._id !== postId));
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Failed to delete post.");
+    }
+  };
+
+  // ===== Voice Recording =====
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      let mimeType = "";
+      if (MediaRecorder.isTypeSupported("audio/webm")) mimeType = "audio/webm";
+      else if (MediaRecorder.isTypeSupported("audio/ogg")) mimeType = "audio/ogg";
+      else throw new Error("No supported audio MIME type for recording.");
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
+      recorder.onstop = async () => {
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        setAudioBlob(blob);
+        await transcribeAndPost(blob);
+      };
+
+      recorder.start();
+      setRecording(true);
+    } catch (err) {
+      console.error("Microphone access error:", err);
+      alert("Microphone access denied or unsupported browser.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+    }
+  };
+
+  // ===== Transcribe and Post Automatically =====
+  const transcribeAndPost = async (blob) => {
+    setTranscribing(true);
+    try {
+      const formData = new FormData();
+      formData.append("audio", blob, "recording.webm");
+
+      const res = await axios.post(
+        `${API_BASE_URL}/api/auth/voice-transcribe`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (res.data?.text) {
+        const text = res.data.text.trim();
+        if (text) await handlePost(text);
+      } else {
+        alert("Transcription returned empty text.");
+      }
+    } catch (err) {
+      console.error("Transcription error:", err.response?.data || err.message);
+      alert("Voice transcription failed. Check server logs.");
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
+  const playAudio = () => {
+    if (!audioBlob) return;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      URL.revokeObjectURL(audioRef.current.src);
+    }
+    const url = URL.createObjectURL(audioBlob);
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    audio.play();
+    setPlaying(true);
+    audio.onended = () => {
+      setPlaying(false);
+      URL.revokeObjectURL(url);
+    };
+  };
+
+  // ===== Charts =====
+  const moodScale = { sad: 1, tired: 2, neutral: 3, anxious: 4, angry: 5, happy: 6 };
   const [selectedMood, setSelectedMood] = useState("all");
 
   const filteredEntries = useMemo(() => {
@@ -127,7 +269,6 @@ export default function Insights() {
     return Object.values(grouped).sort((a, b) => new Date(a.date) - new Date(b.date));
   }, [filteredEntries]);
 
-  // ===== Mood Distribution Data =====
   const moodDistribution = useMemo(() => {
     if (!Array.isArray(entries)) return [];
     const counts = {};
@@ -144,190 +285,171 @@ export default function Insights() {
   const textColor = theme === "dark" ? "#f3f4f6" : "#111827";
 
   if (contextLoading)
-    return <p className="text-center text-gray-500 mt-8">⏳ Loading insights...</p>;
+    return <p className="text-center text-gray-500 mt-8 animate-pulse">⏳ Loading insights...</p>;
   if (contextError)
     return <p className="text-center text-red-500 mt-8">{contextError}</p>;
 
+  // ====== Animated UI ======
   return (
     <div
-      className={`max-w-5xl mx-auto px-4 min-h-screen transition-colors duration-300 ${
-        theme === "dark" ? "bg-gray-900" : "bg-purple-50"
-      }`}
+      className={`max-w-5xl mx-auto px-4 min-h-screen transition-colors duration-500 ${
+        theme === "dark"
+          ? "bg-gradient-to-b from-gray-950 to-gray-900 text-gray-100"
+          : "bg-gradient-to-b from-purple-50 to-white text-gray-900"
+      } animate-fadeIn`}
     >
-      {/* ===== Mood vs Date Graph ===== */}
-      <div
-        className="p-6 rounded-xl shadow-md mt-10 mb-10 border border-gray-200 dark:border-gray-700"
-        style={{ backgroundColor: chartBg }}
-      >
-        <h3 className="text-lg font-semibold mb-4" style={{ color: textColor }}>
-          📈 Mood vs Date
-        </h3>
-
-        <div className="mb-4">
-          <label className="mr-2" style={{ color: textColor }}>
-            Filter by Mood:
-          </label>
-          <select
-            className="p-2 rounded border dark:border-gray-600"
-            value={selectedMood}
-            onChange={(e) => setSelectedMood(e.target.value)}
-          >
-            <option value="all">All</option>
-            {Object.keys(moodScale).map((mood) => (
-              <option key={mood} value={mood}>
-                {mood}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {lineData.length === 0 ? (
-          <p className="text-gray-500">No mood data available for this selection.</p>
-        ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={lineData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" stroke={textColor} />
-              <YAxis
-                domain={[1, 6]}
-                ticks={[1, 2, 3, 4, 5, 6]}
-                stroke={textColor}
-                tickFormatter={(v) =>
-                  Object.keys(moodScale).find((key) => moodScale[key] === v)
-                }
-              />
-              <Tooltip
-                formatter={(value, name, props) => [
-                  `Mood: ${props.payload?.moodLabel || "neutral"}`,
-                  "Mood Value",
-                ]}
-              />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="moodValue"
-                stroke="#3b82f6"
-                activeDot={{ r: 8 }}
-                dot={{ r: 5 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* ===== Mood Distribution Graph ===== */}
-      <div
-        className="p-6 rounded-xl shadow-md mb-10 border border-gray-200 dark:border-gray-700"
-        style={{ backgroundColor: chartBg }}
-      >
-        <h3 className="text-lg font-semibold mb-4" style={{ color: textColor }}>
-          📊 Mood Distribution
-        </h3>
-
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={moodDistribution}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="mood" stroke={textColor} />
-            <YAxis stroke={textColor} />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="count" fill="#f97316" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <style>
+        {`
+          @keyframes fadeIn { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
+          .animate-fadeIn { animation: fadeIn 0.6s ease-in-out; }
+          button:hover { box-shadow: 0 0 10px rgba(147, 51, 234, 0.4); }
+        `}
+      </style>
 
       {/* ===== Community Wall ===== */}
-      <div
-        className="p-6 rounded-xl shadow-md mb-10 border border-gray-200 dark:border-gray-700"
+      <section
+        className="p-6 rounded-2xl shadow-lg mb-16 border border-gray-300 dark:border-gray-700 hover:shadow-blue-400/30 transition-all duration-500 transform hover:scale-[1.02] backdrop-blur-sm bg-opacity-70"
         style={{ backgroundColor: chartBg }}
       >
-        <h3 className="text-lg font-semibold mb-4" style={{ color: textColor }}>
+        <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
           🌐 Community Wall
         </h3>
 
-        <textarea
-          className="w-full p-3 mb-3 rounded-lg border dark:border-gray-600 resize-none"
-          style={{
-            backgroundColor: theme === "dark" ? "#374151" : "#f9fafb",
-            color: textColor,
-          }}
-          placeholder="Share your thoughts with the community..."
-          value={newPost}
-          onChange={(e) => setNewPost(e.target.value)}
-          rows={3}
-        />
-        <button
-          onClick={handlePost}
-          disabled={posting}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
-        >
-          {posting ? <Loader2 className="animate-spin w-5 h-5" /> : <Send className="w-5 h-5" />}
-          {posting ? "Posting..." : "Share"}
-        </button>
+        {/* Input Area */}
+        <div className="flex mb-4 items-start gap-2">
+          <textarea
+            className="flex-1 p-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-purple-400 focus:outline-none resize-none transition-all"
+            rows={2}
+            placeholder="Share your thoughts..."
+            value={newPost}
+            onChange={(e) => setNewPost(e.target.value)}
+          />
+          <button
+            onClick={() => handlePost()}
+            disabled={posting || !newPost.trim()}
+            className="p-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white rounded-full hover:shadow-lg hover:shadow-purple-400/40 hover:scale-110 transition disabled:opacity-50"
+          >
+            {posting ? (
+              <Loader2 className="animate-spin h-5 w-5" />
+            ) : (
+              <Send className="h-5 w-5" />
+            )}
+          </button>
+        </div>
 
+        {/* Voice Buttons */}
+        <div className="flex mb-6 space-x-4 items-center">
+          <button
+            onClick={recording ? stopRecording : startRecording}
+            className={`p-3 rounded-full transition transform hover:scale-110 ${
+              recording ? "bg-red-500 animate-pulse shadow-red-400/50" : "bg-green-500"
+            } text-white shadow-md hover:shadow-lg`}
+          >
+            {recording ? <StopCircle /> : <Mic />}
+          </button>
+          {audioBlob && (
+            <button
+              onClick={playAudio}
+              className="p-3 rounded-full bg-blue-500 text-white hover:bg-blue-600 hover:scale-110 shadow-md transition"
+            >
+              {playing ? (
+                <Loader2 className="animate-spin h-5 w-5" />
+              ) : (
+                <Play className="h-5 w-5" />
+              )}
+            </button>
+          )}
+          {transcribing && (
+            <p className="text-gray-400 text-sm animate-pulse">Transcribing your voice...</p>
+          )}
+        </div>
+
+        {/* Posts */}
         {loadingPosts ? (
-          <p className="mt-4" style={{ color: textColor }}>
-            ⏳ Loading posts...
-          </p>
+          <p className="text-gray-500 animate-pulse">Loading community posts...</p>
         ) : communityPosts.length === 0 ? (
-          <p className="mt-4 text-gray-500">No posts yet. Be the first to share 🌱</p>
+          <p className="text-gray-400 italic">No posts yet. Be the first to share!</p>
         ) : (
-          <div className="mt-6 space-y-4 max-h-96 overflow-y-auto">
+          <div className="space-y-4">
             {communityPosts.map((post) => (
               <div
                 key={post._id}
-                className="p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 transition hover:shadow-md"
-                style={{
-                  backgroundColor: theme === "dark" ? "#2d3748" : "#f3f4f6",
-                  color: textColor,
-                }}
+                className="p-4 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-lg hover:shadow-purple-400/20 transition-all duration-500 transform hover:scale-[1.01]"
               >
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs text-gray-400">
-                    {new Date(post.createdAt).toLocaleString()}
-                  </span>
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full ${
-                      post.mood === "happy"
-                        ? "bg-green-100 text-green-700"
-                        : post.mood === "sad"
-                        ? "bg-blue-100 text-blue-700"
-                        : post.mood === "angry"
-                        ? "bg-red-100 text-red-700"
-                        : post.mood === "anxious"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : post.mood === "tired"
-                        ? "bg-purple-100 text-purple-700"
-                        : "bg-gray-200 text-gray-700"
-                    }`}
-                  >
-                    {post.mood || "neutral"}
-                  </span>
-                </div>
+                {editingPostId === post._id ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      className="flex-1 p-2 rounded border border-gray-300 dark:border-gray-600"
+                    />
+                    <button
+                      onClick={() => saveEdit(post._id)}
+                      className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditingPostId(null)}
+                      className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-base leading-relaxed">{post.text}</p>
 
-                <p className="mb-3">{post.text || post.content}</p>
+                    {/* ===== Interactive Buttons ===== */}
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="flex space-x-3">
+                        <button
+                          onClick={() => handleReact(post._id, "support")}
+                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-pink-500 to-red-500 text-white text-sm font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                        >
+                          <Heart className="h-4 w-4" />
+                          <span>{post.likes?.support || 0}</span>
+                        </button>
 
-                <div className="flex items-center gap-4 text-sm">
-                  <button
-                    onClick={() => handleReact(post._id, "support")}
-                    className="flex items-center gap-1 hover:text-indigo-600 transition"
-                  >
-                    <HandHelping className="w-4 h-4" />
-                    Support ({post.likes?.support || 0})
-                  </button>
-                  <button
-                    onClick={() => handleReact(post._id, "relate")}
-                    className="flex items-center gap-1 hover:text-pink-500 transition"
-                  >
-                    <Heart className="w-4 h-4" />
-                    Relate ({post.likes?.relate || 0})
-                  </button>
-                </div>
+                        <button
+                          onClick={() => handleReact(post._id, "relate")}
+                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-sky-500 to-blue-600 text-white text-sm font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                        >
+                          <HandHelping className="h-4 w-4" />
+                          <span>{post.likes?.relate || 0}</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setEditingPostId(post._id);
+                            setEditingText(post.text);
+                          }}
+                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                          Edit
+                        </button>
+
+                        <button
+                          onClick={() => deletePost(post._id)}
+                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-rose-600 to-red-700 text-white text-sm font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </button>
+                      </div>
+
+                      <span className="text-gray-400 text-xs ml-auto">
+                        {new Date(post.date || post.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

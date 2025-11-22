@@ -5,36 +5,44 @@ import {
   getUserProfile,
   updateUserProfile,
   toggleTheme,
-  getMindMap,     // ✅ Mind Map controller
-  saveMindMap,    // ✅ Mind Map controller
-  shareCommunityPost,   // ✅ Community feature
-  getCommunityPosts,    // ✅ Community feature
-  reactCommunityPost    // ✅ Community feature
+  getMindMap,
+  saveMindMap,
+  shareCommunityPost,
+  getCommunityPosts,
+  reactCommunityPost,
+  editCommunityPost,
+  deleteCommunityPost,
+  getMoodEntries,
+  voiceTranscribe,
+  chatHandler,
 } from "../controllers/AuthController.js";
-import { protect } from "../middleware/authmiddleware.js";
+
+import { protect } from "../middleware/authMiddleware.js";
 import parser from "../middleware/upload.js";
+import audioUpload from "../middleware/uploadAudio.js";
 import User from "../models/user.js";
 import cloudinary from "../config/cloudinary.js";
 
 const router = express.Router();
 
-// ==================== AUTH ====================
+/* ==================== AUTH ==================== */
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 
-// ==================== USER PROFILE ====================
+/* ==================== USER PROFILE ==================== */
 router.get("/profile", protect, getUserProfile);
 router.put("/profile", protect, updateUserProfile);
 router.put("/theme", protect, toggleTheme);
 
-// ==================== AVATAR UPLOAD ====================
+/* ==================== AVATAR UPLOAD ==================== */
 router.post("/avatar", protect, parser.single("avatar"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
     const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Delete old avatar from Cloudinary if exists
+    // delete old avatar if exists
     if (user.avatar) {
       try {
         const publicId = user.avatar.split("/").slice(-2).join("/").split(".")[0];
@@ -44,24 +52,43 @@ router.post("/avatar", protect, parser.single("avatar"), async (req, res) => {
       }
     }
 
-    // Save new avatar
     user.avatar = req.file.path;
     await user.save();
 
-    res.json({ message: "Avatar uploaded successfully", avatar: user.avatar });
+    res.json({
+      message: "Avatar uploaded successfully",
+      avatar: user.avatar,
+    });
   } catch (err) {
     console.error("❌ Avatar upload error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
-// ==================== MIND MAP ====================
-router.get("/mindmap", protect, getMindMap);   // ✅ get Mind Map
-router.post("/mindmap", protect, saveMindMap); // ✅ save/update Mind Map
+/* ==================== MIND MAP ==================== */
+router.get("/mindmap", protect, getMindMap);
+router.post("/mindmap", protect, saveMindMap);
 
-// ==================== COMMUNITY SHARING ====================
-router.post("/community/share", protect, shareCommunityPost); // Share anonymously
-router.get("/community/posts", protect, getCommunityPosts);   // Fetch community posts
-router.post("/community/react", protect, reactCommunityPost); // React 💬 / ❤️
+/* ==================== MOOD ENTRIES ==================== */
+router.get("/mood-entries", protect, getMoodEntries);
+
+/* ==================== COMMUNITY POSTS ==================== */
+router.post("/community/share", protect, shareCommunityPost);
+router.get("/community/posts", protect, getCommunityPosts);
+router.post("/community/react", protect, reactCommunityPost);
+router.put("/community/posts/:id", protect, editCommunityPost);
+router.delete("/community/posts/:id", protect, deleteCommunityPost);
+
+/* ==================== VOICE TRANSCRIBE ==================== */
+// 🎙️ Receives FormData with "file" (audio blob)
+router.post(
+  "/voice-transcribe",
+  protect,
+  audioUpload.single("file"),  // ✅ matches formData.append("file")
+  voiceTranscribe
+);
+
+/* ==================== AI CHAT ==================== */
+router.post("/chat", protect, chatHandler);
 
 export default router;
