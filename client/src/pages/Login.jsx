@@ -26,12 +26,32 @@ export default function Login({ setUser }) {
 
     try {
       const res = await api.post("/auth/login", { email, password });
-      
-      // ✅ Store token & user info
-      localStorage.setItem("token", res.data.token);
-      setUser(res.data);
 
-      navigate("/"); // Redirect to home
+      // Backend returns:
+      // { _id, name, email, avatar, theme, token }
+      const token = res.data.token;
+
+      // Save token
+      localStorage.setItem("token", token);
+
+      // Save user info (without password)
+      const userData = {
+        _id: res.data._id,
+        name: res.data.name,
+        email: res.data.email,
+        avatar: res.data.avatar,
+        theme: res.data.theme,
+      };
+
+      localStorage.setItem("user", JSON.stringify(userData));
+
+      // Update global state
+      setUser({
+        ...userData,
+        token,
+      });
+
+      navigate("/");
     } catch (err) {
       setError(err.response?.data?.message || "Login failed");
     } finally {
@@ -39,7 +59,6 @@ export default function Login({ setUser }) {
     }
   };
 
-  // Theme-based styling
   const styles = {
     container: `max-w-md mx-auto mt-20 p-6 rounded-xl shadow-md transition-colors duration-300 ${
       theme === "dark" ? "bg-gray-900 text-gray-200" : "bg-white text-gray-900"
@@ -55,9 +74,10 @@ export default function Login({ setUser }) {
         : "bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400"
     }`,
     infoText: theme === "dark" ? "text-gray-400" : "text-gray-600",
-    link: theme === "dark"
-      ? "text-purple-400 hover:text-purple-300 font-medium"
-      : "text-purple-600 hover:text-purple-700 font-medium",
+    link:
+      theme === "dark"
+        ? "text-purple-400 hover:text-purple-300 font-medium"
+        : "text-purple-600 hover:text-purple-700 font-medium",
   };
 
   return (

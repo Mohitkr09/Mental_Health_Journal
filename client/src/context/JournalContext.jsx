@@ -1,20 +1,36 @@
 // src/context/JournalContext.jsx
 import { createContext, useContext, useState, useEffect } from "react";
-import api from "../utils/api.js"; // ✅ use your configured Axios instance
+import api from "../utils/api.js";
+import { useAuth } from "./AuthContext.jsx";
 
 const JournalContext = createContext();
 
 export function JournalProvider({ children }) {
+  const { user } = useAuth(); // ✅ get logged-in user from Auth
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // 🔹 Fetch all journal entries
+  /** ----------------------------------------------------------------
+   *  FETCH JOURNALS ONLY WHEN:
+   *   ✅ user exists
+   *   ✅ token exists
+   * ---------------------------------------------------------------- */
   const fetchEntries = async () => {
+    const token = localStorage.getItem("token");
+
+    if (!user || !token) {
+      console.warn("⛔ No user/token — skipping journal fetch");
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await api.get("/journal"); // ✅ uses baseURL http://localhost:5000/api
-      setEntries(Array.isArray(res.data) ? res.data : []); // ✅ ensure array
+      const res = await api.get("/journal", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setEntries(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error("Error fetching journals:", err);
       setError("Failed to load journal entries");
@@ -23,17 +39,35 @@ export function JournalProvider({ children }) {
     }
   };
 
-  // 🧠 Fetch on mount
+  /** ----------------------------------------------------------------
+   *  FETCH WHEN USER LOGS IN
+   * ---------------------------------------------------------------- */
   useEffect(() => {
-    fetchEntries();
-  }, []);
+    if (user) {
+      console.log("✅ User ready — fetching journals");
+      fetchEntries();
+    }
+  }, [user]); // rerun when user becomes available
 
-  // 📝 Add new journal entry and auto-update everywhere
+  /** ----------------------------------------------------------------
+   *  ADD ENTRY
+   * ---------------------------------------------------------------- */
   const addEntry = async (newEntry) => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      console.error("⛔ Cannot add entry — No token!");
+      throw new Error("Not authenticated");
+    }
+
     try {
-      const res = await api.post("/journal", newEntry); // ✅ fixed here
-      const savedEntry = res.data || newEntry;
-      setEntries((prev) => [...prev, savedEntry]); // ✅ immediate context update
+      const res = await api.post("/journal", newEntry, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const savedEntry = res.data?.journal || res.data;
+
+      setEntries((prev) => [savedEntry, ...prev]);
       return savedEntry;
     } catch (err) {
       console.error("❌ Error adding entry:", err);
@@ -41,15 +75,16 @@ export function JournalProvider({ children }) {
     }
   };
 
-  // ♻️ Optional: auto-refresh entries every 10s
-  useEffect(() => {
-    const sync = setInterval(fetchEntries, 10000);
-    return () => clearInterval(sync);
-  }, []);
-
   return (
     <JournalContext.Provider
-      value={{ entries, setEntries, addEntry, fetchEntries, loading, error }}
+      value={{
+        entries,
+        setEntries,
+        addEntry,
+        fetchEntries,
+        loading,
+        error,
+      }}
     >
       {children}
     </JournalContext.Provider>
