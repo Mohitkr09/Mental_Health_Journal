@@ -1,39 +1,36 @@
-# server/python/voice_transcribe.py
-from flask import Blueprint, request, jsonify
-import subprocess
-import tempfile
+import sys
 import os
+from faster_whisper import WhisperModel
 
-voice_bp = Blueprint("voice", __name__)
+# Load fast English model
+model = WhisperModel("small.en", device="cpu", compute_type="int8")
 
-@voice_bp.route("/api/auth/voice-transcribe", methods=["POST"])
-def voice_transcribe():
-    try:
-        if "file" not in request.files:
-            return jsonify({"error": "No file uploaded"}), 400
+def transcribe_audio(audio_path):
+    """Return English transcription."""
+    segments, info = model.transcribe(audio_path, beam_size=5)
 
-        file = request.files["file"]
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
-            file.save(tmp.name)
-            input_path = tmp.name
+    print("\nWHISPER SEGMENTS:", file=sys.stderr)
+    lines = []
+    for seg in segments:
+        print(f"[{seg.start:.2f} → {seg.end:.2f}] {seg.text}", file=sys.stderr)
+        lines.append(seg.text.strip())
 
-        # ✅ Run your existing transcribe.py script
-        result = subprocess.run(
-            ["python", "python/transcribe.py", input_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+    text = " ".join(lines).strip()
 
-        os.remove(input_path)
+    # Return text even if one segment exists
+    if text:
+        return text
 
-        if result.returncode != 0:
-            print("⚠️ Transcription error:", result.stderr)
-            return jsonify({"error": "Transcription failed"}), 500
+    return "No speech detected"
 
-        transcript = result.stdout.strip()
-        return jsonify({"text": transcript})
 
-    except Exception as e:
-        print("⚠️ Voice transcription error:", e)
-        return jsonify({"error": str(e)}), 500
+if __name__ == "__main__":
+    input_audio = sys.argv[1]
+
+    print("DEBUG INPUT:", input_audio, file=sys.stderr)
+    print("DEBUG SIZE:", os.path.getsize(input_audio), "bytes", file=sys.stderr)
+
+    result = transcribe_audio(input_audio)
+
+    # PRINT ONLY THE FINAL TEXT FOR NODE TO READ
+    print(result)

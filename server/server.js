@@ -10,17 +10,28 @@ import path from "path";
 // Import routes
 import journalRoutes from "./routes/journalRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
-import authRoutes from "./routes/authRoutes.js"; // ✅ Auth + Community
+import authRoutes from "./routes/authRoutes.js"; // Auth + Community
 import userRoutes from "./routes/userRoutes.js";
+import analyticsRoutes from "./routes/analyticsRoutes.js";
+import scheduleRoutes from "./routes/scheduleRoutes.js";
 
-// 📌 Import Reminder Service
+
+
+// Reminder Service
 import startReminderService from "./services/reminderService.js";
 
 dotenv.config();
 const app = express();
 
+// ====== CORS FIX FOR PRODUCTION ======
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "*", // Vercel URL required!
+    credentials: true,
+  })
+);
+
 // ====== Middlewares ======
-app.use(cors({ origin: process.env.CLIENT_URL || "*" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(helmet());
@@ -34,8 +45,6 @@ mongoose
   })
   .then(() => {
     console.log("✅ MongoDB Connected");
-
-    // ✅ Start Daily Reminder Service after DB is connected
     startReminderService();
   })
   .catch((err) => {
@@ -43,16 +52,15 @@ mongoose
     process.exit(1);
   });
 
-// ====== Serve Static Files for Cloudinary Local Fallback (Optional) ======
-// app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
-
-// ====== API Routes ======
+// ====== API ROUTES ======
 app.use("/api/journal", journalRoutes);
 app.use("/api/chat", chatRoutes);
-app.use("/api/auth", authRoutes); // login/register + mindmap + community
-app.use("/api/users", userRoutes); // profile, avatar upload, update
+app.use("/api/auth", authRoutes);  // register/login/mindmap/community
+app.use("/api/users", userRoutes); // profile, avatar upload
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/schedule", scheduleRoutes);
 
-// ====== Health Check ======
+// Health Check
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "🚀 API is running" });
 });
@@ -67,6 +75,4 @@ app.use((err, req, res, next) => {
 
 // ====== Start Server ======
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`🚀 Server running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

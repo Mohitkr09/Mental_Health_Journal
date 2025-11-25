@@ -80,13 +80,16 @@ router.put("/community/posts/:id", protect, editCommunityPost);
 router.delete("/community/posts/:id", protect, deleteCommunityPost);
 
 /* ==================== VOICE TRANSCRIBE ==================== */
-// 🎙️ Receives FormData with "file" (audio blob)
+// 🎙 FRONTEND → formData.append("file", blob)
+// 🚀 BACKEND MUST USE .single("file")
+/* ==================== VOICE TRANSCRIBE ==================== */
 router.post(
   "/voice-transcribe",
   protect,
-  audioUpload.single("file"),  // ✅ matches formData.append("file")
+  audioUpload.single("audio"),   // ✅ FINAL FIX — match multer + frontend
   voiceTranscribe
 );
+
 
 /* ==================== AI CHAT ==================== */
 router.post("/chat", protect, chatHandler);

@@ -1,39 +1,48 @@
 import Journal from "../models/Journal.js";
-import User from "../models/user.js"; // make sure you have this
+import User from "../models/user.js";
+
+// Normalize user ID from JWT middleware
+const getUserIdFromReq = (req) => req.user?._id || req.user?.id;
 
 // --- Create Journal Entry + Update Gamification ---
 export const createJournal = async (req, res) => {
   try {
     const { text, mood } = req.body;
-    const userId = req.user.id; // assuming you’re using JWT auth middleware
+    const userId = getUserIdFromReq(req);
 
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
     if (!text) return res.status(400).json({ error: "Text is required" });
 
-    // (Optional AI response)
+    // AI reflection
     let aiResponse = "";
-    if (mood === "happy") aiResponse = "That's great! Keep embracing the positivity.";
-    else if (mood === "sad") aiResponse = "It's okay to feel sad. Writing it down is a good step.";
-    else if (mood === "anxious") aiResponse = "Take a deep breath, you’re doing well.";
-    else aiResponse = "Thanks for sharing your thoughts today.";
+    if (mood === "happy") aiResponse = "That's great! Keep embracing positivity.";
+    else if (mood === "sad") aiResponse = "It's okay to feel sad. Writing helps.";
+    else if (mood === "anxious") aiResponse = "Take deep breaths. You're doing great.";
+    else aiResponse = "Thanks for sharing your thoughts.";
 
-    // Save journal
-    const journal = await Journal.create({ user: userId, text, mood, aiResponse });
+    // MUST save using userId (your schema requires this!)
+    const journal = await Journal.create({
+      userId,
+      text,
+      mood,
+      aiResponse,
+    });
 
-    // --- Update User Streaks & Badges ---
+    // Update streak and badges
     const user = await User.findById(userId);
 
     const today = new Date().toDateString();
     const yesterday = new Date(Date.now() - 86400000).toDateString();
 
     if (user.lastJournalDate?.toDateString() === yesterday) {
-      user.streak += 1; // continue streak
+      user.streak += 1;
     } else if (user.lastJournalDate?.toDateString() !== today) {
-      user.streak = 1; // reset streak
+      user.streak = 1;
     }
 
     user.lastJournalDate = new Date();
 
-    // Assign badges
+    // Badges
     if (user.streak === 3 && !user.badges.includes("3-day Streak")) {
       user.badges.push("3-day Streak");
     }
@@ -52,20 +61,32 @@ export const createJournal = async (req, res) => {
       badges: user.badges,
       aiResponse,
     });
+
   } catch (error) {
-    console.error(error);
+    console.error("Create journal error:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
 
-// --- Get Journals for Logged-in User ---
+
+// --- Get Last 30 Days Journals ---
 export const getJournals = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const journals = await Journal.find({ user: userId }).sort({ createdAt: -1 });
+    const userId = getUserIdFromReq(req);
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    // MUST query with userId not user
+    const journals = await Journal.find({
+      userId,
+      createdAt: { $gte: cutoff },
+    }).sort({ createdAt: -1 });
+
     res.json(journals);
   } catch (error) {
-    console.error(error);
+    console.error("Get journals error:", error);
     res.status(500).json({ error: "Server error" });
   }
 };

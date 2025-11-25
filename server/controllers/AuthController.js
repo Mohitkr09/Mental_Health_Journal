@@ -285,58 +285,78 @@ export const voiceTranscribe = async (req, res) => {
       size: req.file.size,
     });
 
-    // 🧩 Save the file temporarily
-    const tempWebm = path.join(os.tmpdir(), `audio-${Date.now()}.webm`);
-    fs.writeFileSync(tempWebm, req.file.buffer);
-
-    // 🧠 Confirm ffmpeg path
+    // FFmpeg path
     const ffmpegPath =
       "C:\\Users\\hp\\Downloads\\ffmpeg-8.0-essentials_build\\ffmpeg-8.0-essentials_build\\bin\\ffmpeg.exe";
-    if (!fs.existsSync(ffmpegPath)) {
-      console.error("❌ FFmpeg not found at path:", ffmpegPath);
-      return res.status(500).json({ error: "FFmpeg not found" });
+
+    const tempWebm = path.join(os.tmpdir(), `audio-${Date.now()}.webm`);
+    const tempWav = path.join(os.tmpdir(), `audio-${Date.now()}.wav`);
+
+    // Write uploaded file to temp folder
+    if (req.file.path) {
+      fs.copyFileSync(req.file.path, tempWebm);
+    } else {
+      fs.writeFileSync(tempWebm, req.file.buffer);
     }
 
-    // 🎧 Convert webm → wav
-    const tempWav = path.join(os.tmpdir(), `audio-${Date.now()}.wav`);
-    const cmd = `"${ffmpegPath}" -y -i "${tempWebm}" -ar 16000 -ac 1 -c:a pcm_s16le "${tempWav}"`;
-
-    console.log("🔁 Converting with FFmpeg...");
+    // Convert webm → wav
     try {
-      execSync(cmd, { stdio: "pipe" });
-      console.log("✅ Conversion complete:", tempWav);
+      execSync(
+        `"${ffmpegPath}" -y -i "${tempWebm}" -ar 16000 -ac 1 -c:a pcm_s16le "${tempWav}"`,
+        { stdio: "ignore" }
+      );
+      console.log("✅ FFmpeg conversion success");
+
+      // Debug WAV file
+      console.log(
+        "WAV exists:",
+        fs.existsSync(tempWav),
+        "Size:",
+        fs.statSync(tempWav).size
+      );
+
+      const debugWavPath = path.join(process.cwd(), "debug_audio.wav");
+      fs.copyFileSync(tempWav, debugWavPath);
+      console.log("DEBUG WAV SAVED:", debugWavPath);
+
     } catch (err) {
-      console.error("❌ FFmpeg conversion failed:", err.message);
+      console.error("❌ FFmpeg conversion failed:", err);
       return res.status(500).json({ error: "FFmpeg conversion failed" });
     }
 
-    // 📜 Whisper transcription
-    console.log("🧠 Sending to Whisper...");
-    const transcription = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(tempWav),
-      model: "whisper-1",
-      response_format: "json",
+    // Correct Python script path
+    const pythonScript = path.join(process.cwd(), "python/transcribe.py");
+
+    console.log("🐍 Python script path being executed:", pythonScript);
+
+    const result = spawnSync("python", [pythonScript, tempWav], {
+      encoding: "utf-8",
     });
 
-    console.log("✅ Transcription result:", transcription.text);
+    console.log("🐍 PYTHON STDOUT:", result.stdout);
+    console.error("🐍 PYTHON STDERR:", result.stderr);
 
-    // 🧹 Cleanup
     fs.unlinkSync(tempWebm);
     fs.unlinkSync(tempWav);
 
-    if (!transcription.text || !transcription.text.trim()) {
-      return res.json({ text: "No text detected" });
+    if (result.error) {
+      console.error("❌ Python error:", result.error);
+      return res.status(500).json({ error: "Transcription failed" });
     }
 
-    res.json({ text: transcription.text.trim() });
+    const outputText = result.stdout.trim();
+    res.json({ text: outputText || "No speech detected" });
+
   } catch (error) {
     console.error("🔥 Transcription error:", error);
     res.status(500).json({
       error: "Transcription failed",
-      details: error.message || "Unknown error",
+      details: error.message,
     });
   }
 };
+
+
 
 // ---------------- CHAT (Python AI) ----------------
 export const chatHandler = async (req, res) => {

@@ -245,123 +245,64 @@ export default function Insights() {
     };
   };
 
-  // ===== Charts =====
-  const moodScale = { sad: 1, tired: 2, neutral: 3, anxious: 4, angry: 5, happy: 6 };
-  const [selectedMood, setSelectedMood] = useState("all");
-
-  const filteredEntries = useMemo(() => {
-    if (!Array.isArray(entries)) return [];
-    return entries.filter(
-      (item) => item.mood && (selectedMood === "all" || item.mood === selectedMood)
-    );
-  }, [entries, selectedMood]);
-
-  const lineData = useMemo(() => {
-    const grouped = {};
-    filteredEntries.forEach((item) => {
-      const date = new Date(item.date || item.createdAt).toLocaleDateString();
-      grouped[date] = {
-        date,
-        moodValue: moodScale[item.mood] || 3,
-        moodLabel: item.mood,
-      };
-    });
-    return Object.values(grouped).sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [filteredEntries]);
-
-  const moodDistribution = useMemo(() => {
-    if (!Array.isArray(entries)) return [];
-    const counts = {};
-    entries.forEach((item) => {
-      if (item.mood) counts[item.mood] = (counts[item.mood] || 0) + 1;
-    });
-    return Object.keys(moodScale).map((mood) => ({
-      mood,
-      count: counts[mood] || 0,
-    }));
-  }, [entries]);
-
-  const chartBg = theme === "dark" ? "#1f2937" : "#ffffff";
-  const textColor = theme === "dark" ? "#f3f4f6" : "#111827";
-
-  if (contextLoading)
-    return <p className="text-center text-gray-500 mt-8 animate-pulse">⏳ Loading insights...</p>;
-  if (contextError)
-    return <p className="text-center text-red-500 mt-8">{contextError}</p>;
-
-  // ====== Animated UI ======
+  // ====== Animated UI =======
   return (
     <div
-      className={`max-w-5xl mx-auto px-4 min-h-screen transition-colors duration-500 ${
+      className={`w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 min-h-screen transition-colors duration-500 ${
         theme === "dark"
           ? "bg-gradient-to-b from-gray-950 to-gray-900 text-gray-100"
           : "bg-gradient-to-b from-purple-50 to-white text-gray-900"
-      } animate-fadeIn`}
+      }`}
     >
-      <style>
-        {`
-          @keyframes fadeIn { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
-          .animate-fadeIn { animation: fadeIn 0.6s ease-in-out; }
-          button:hover { box-shadow: 0 0 10px rgba(147, 51, 234, 0.4); }
-        `}
-      </style>
-
-      {/* ===== Community Wall ===== */}
+      {/* Community Wall */}
       <section
-        className="p-6 rounded-2xl shadow-lg mb-16 border border-gray-300 dark:border-gray-700 hover:shadow-blue-400/30 transition-all duration-500 transform hover:scale-[1.02] backdrop-blur-sm bg-opacity-70"
-        style={{ backgroundColor: chartBg }}
+        className="p-4 sm:p-6 rounded-2xl shadow-lg mb-16 border border-gray-300 dark:border-gray-700 bg-opacity-80 backdrop-blur-sm"
+        style={{ backgroundColor: theme === "dark" ? "#1f2937" : "#ffffff" }}
       >
         <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
           🌐 Community Wall
         </h3>
 
-        {/* Input Area */}
-        <div className="flex mb-4 items-start gap-2">
+        {/* Responsive Input Area */}
+        <div className="flex flex-col sm:flex-row mb-4 gap-3">
           <textarea
-            className="flex-1 p-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-purple-400 focus:outline-none resize-none transition-all"
+            className="flex-1 p-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-purple-400 focus:outline-none resize-none"
             rows={2}
             placeholder="Share your thoughts..."
             value={newPost}
             onChange={(e) => setNewPost(e.target.value)}
           />
+
           <button
             onClick={() => handlePost()}
             disabled={posting || !newPost.trim()}
-            className="p-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white rounded-full hover:shadow-lg hover:shadow-purple-400/40 hover:scale-110 transition disabled:opacity-50"
+            className="p-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white rounded-full hover:scale-105 transition disabled:opacity-50 self-end sm:self-center"
           >
-            {posting ? (
-              <Loader2 className="animate-spin h-5 w-5" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
+            {posting ? <Loader2 className="animate-spin h-5 w-5" /> : <Send className="h-5 w-5" />}
           </button>
         </div>
 
         {/* Voice Buttons */}
-        <div className="flex mb-6 space-x-4 items-center">
+        <div className="flex flex-wrap gap-4 items-center mb-6">
           <button
             onClick={recording ? stopRecording : startRecording}
-            className={`p-3 rounded-full transition transform hover:scale-110 ${
-              recording ? "bg-red-500 animate-pulse shadow-red-400/50" : "bg-green-500"
-            } text-white shadow-md hover:shadow-lg`}
+            className={`p-4 rounded-full ${
+              recording ? "bg-red-500 animate-pulse" : "bg-green-500"
+            } text-white shadow`}
           >
             {recording ? <StopCircle /> : <Mic />}
           </button>
+
           {audioBlob && (
             <button
               onClick={playAudio}
-              className="p-3 rounded-full bg-blue-500 text-white hover:bg-blue-600 hover:scale-110 shadow-md transition"
+              className="p-4 rounded-full bg-blue-500 text-white shadow hover:bg-blue-600"
             >
-              {playing ? (
-                <Loader2 className="animate-spin h-5 w-5" />
-              ) : (
-                <Play className="h-5 w-5" />
-              )}
+              {playing ? <Loader2 className="animate-spin h-5 w-5" /> : <Play className="h-5 w-5" />}
             </button>
           )}
-          {transcribing && (
-            <p className="text-gray-400 text-sm animate-pulse">Transcribing your voice...</p>
-          )}
+
+          {transcribing && <p className="text-gray-400 text-sm animate-pulse">Transcribing…</p>}
         </div>
 
         {/* Posts */}
@@ -374,38 +315,40 @@ export default function Insights() {
             {communityPosts.map((post) => (
               <div
                 key={post._id}
-                className="p-4 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-lg hover:shadow-purple-400/20 transition-all duration-500 transform hover:scale-[1.01]"
+                className="p-4 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm"
               >
                 {editingPostId === post._id ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
+                      className="flex-1 p-2 rounded border border-gray-300 dark:border-gray-600"
                       value={editingText}
                       onChange={(e) => setEditingText(e.target.value)}
-                      className="flex-1 p-2 rounded border border-gray-300 dark:border-gray-600"
                     />
-                    <button
-                      onClick={() => saveEdit(post._id)}
-                      className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => setEditingPostId(null)}
-                      className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition"
-                    >
-                      Cancel
-                    </button>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => saveEdit(post._id)}
+                        className="px-3 py-1 bg-green-500 text-white rounded"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingPostId(null)}
+                        className="px-3 py-1 bg-red-500 text-white rounded"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <>
                     <p className="text-base leading-relaxed">{post.text}</p>
 
-                    {/* ===== Interactive Buttons ===== */}
-                    <div className="flex items-center justify-between mt-3">
-                      <div className="flex space-x-3">
+                    <div className="flex flex-wrap items-center justify-between mt-3 gap-3">
+                      <div className="flex flex-wrap gap-3">
                         <button
                           onClick={() => handleReact(post._id, "support")}
-                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-pink-500 to-red-500 text-white text-sm font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                          className="flex items-center gap-1 px-3 py-1 bg-pink-500 text-white rounded-full"
                         >
                           <Heart className="h-4 w-4" />
                           <span>{post.likes?.support || 0}</span>
@@ -413,7 +356,7 @@ export default function Insights() {
 
                         <button
                           onClick={() => handleReact(post._id, "relate")}
-                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-sky-500 to-blue-600 text-white text-sm font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                          className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded-full"
                         >
                           <HandHelping className="h-4 w-4" />
                           <span>{post.likes?.relate || 0}</span>
@@ -424,7 +367,7 @@ export default function Insights() {
                             setEditingPostId(post._id);
                             setEditingText(post.text);
                           }}
-                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-sm font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                          className="flex items-center gap-1 px-3 py-1 bg-indigo-600 text-white rounded-full"
                         >
                           <Edit3 className="h-4 w-4" />
                           Edit
@@ -432,14 +375,14 @@ export default function Insights() {
 
                         <button
                           onClick={() => deletePost(post._id)}
-                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-rose-600 to-red-700 text-white text-sm font-medium shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                          className="flex items-center gap-1 px-3 py-1 bg-red-600 text-white rounded-full"
                         >
                           <Trash2 className="h-4 w-4" />
                           Delete
                         </button>
                       </div>
 
-                      <span className="text-gray-400 text-xs ml-auto">
+                      <span className="text-gray-400 text-xs">
                         {new Date(post.date || post.createdAt).toLocaleString()}
                       </span>
                     </div>
