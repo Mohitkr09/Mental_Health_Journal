@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react";
+// src/App.jsx
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import api from "./utils/api.js";
 
-// Context
+// Context Providers
 import { ThemeProvider } from "./context/ThemeContext.jsx";
+import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
 import { JournalProvider } from "./context/JournalContext.jsx";
 
-// Components & Pages
+// Components
 import Navbar from "./components/Navbar.jsx";
 import Footer from "./components/Footer.jsx";
 import ChatButton from "./components/ChatButton.jsx";
@@ -21,115 +21,95 @@ import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
 import TopicDetail from "./pages/TopicDetail.jsx";
 
+
+// Protected Route Wrapper
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="text-center mt-20 text-gray-500 dark:text-gray-300">
+        ⏳ Loading...
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  return children;
+}
+
+
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const token = localStorage.getItem("token");
-
-  // Fetch user profile on mount if token exists
-  useEffect(() => {
-    const fetchUser = async () => {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const res = await api.get("/users/profile", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setUser(res.data);
-      } catch (err) {
-        console.error("❌ Failed to fetch user:", err.response?.data?.message);
-        localStorage.removeItem("token");
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUser();
-  }, [token]);
-
-  // Protected Route wrapper
-  const ProtectedRoute = ({ children }) => {
-    if (loading)
-      return (
-        <div className="text-center mt-20 text-gray-500 dark:text-gray-300">
-          ⏳ Loading...
-        </div>
-      );
-
-    if (!user) return <Navigate to="/login" replace />;
-
-    return children;
-  };
-
   return (
     <Router>
-      <ThemeProvider>
-        <JournalProvider>
-          <div className="font-sans min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 flex flex-col">
-            
-            {/* Navbar */}
-            <header className="sticky top-0 z-50">
-              <Navbar user={user} setUser={setUser} />
-            </header>
+      <AuthProvider>
+        <ThemeProvider>
+          <JournalProvider>
+            <div className="font-sans min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 flex flex-col">
 
-            {/* Main Content */}
-            <main className="flex-grow">
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/topic/:id" element={<TopicDetail />} />
+              {/* Navbar */}
+              <header className="sticky top-0 z-50">
+                <Navbar />
+              </header>
 
-                <Route
-                  path="/journal"
-                  element={
-                    <ProtectedRoute>
-                      <Journal />
-                    </ProtectedRoute>
-                  }
-                />
+              {/* Main Content */}
+              <main className="flex-grow">
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/topic/:id" element={<TopicDetail />} />
 
-                <Route
-                  path="/insights"
-                  element={
-                    <ProtectedRoute>
-                      <Insights user={user} />
-                    </ProtectedRoute>
-                  }
-                />
+                  <Route
+                    path="/journal"
+                    element={
+                      <ProtectedRoute>
+                        <Journal />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route
-                  path="/chat"
-                  element={
-                    <ProtectedRoute>
-                      <Chat />
-                    </ProtectedRoute>
-                  }
-                />
+                  <Route
+                    path="/insights"
+                    element={
+                      <ProtectedRoute>
+                        <Insights />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route
-                  path="/profile"
-                  element={
-                    <ProtectedRoute>
-                      <Profile user={user} setUser={setUser} />
-                    </ProtectedRoute>
-                  }
-                />
+                  <Route
+                    path="/chat"
+                    element={
+                      <ProtectedRoute>
+                        <Chat />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route path="/login" element={<Login setUser={setUser} />} />
-                <Route path="/register" element={<Register setUser={setUser} />} />
-              </Routes>
-            </main>
+                  <Route
+                    path="/profile"
+                    element={
+                      <ProtectedRoute>
+                        <Profile />
+                      </ProtectedRoute>
+                    }
+                  />
 
-            {/* Footer */}
-            <Footer />
+                  {/* Auth Pages */}
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Register />} />
+                </Routes>
+              </main>
 
-            {/* Floating Chat Button */}
-            {user && <ChatButton />}
-          </div>
-        </JournalProvider>
-      </ThemeProvider>
+              {/* Footer */}
+              <Footer />
+
+              {/* Floating Chat Button */}
+              <ChatButton />
+            </div>
+          </JournalProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </Router>
   );
 }

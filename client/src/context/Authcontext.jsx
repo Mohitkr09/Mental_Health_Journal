@@ -6,20 +6,15 @@ const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-  // ------------------ SAFE USER RESTORE ------------------
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("user");
-
-    // prevent crash when stored as literal "undefined"
     if (!saved || saved === "undefined") {
       localStorage.removeItem("user");
       return null;
     }
-
     try {
       return JSON.parse(saved);
-    } catch (err) {
-      console.warn("⚠️ Invalid user JSON, clearing...", err);
+    } catch {
       localStorage.removeItem("user");
       return null;
     }
@@ -27,7 +22,6 @@ export const AuthProvider = ({ children }) => {
 
   const [loading, setLoading] = useState(true);
 
-  // ------------------ FETCH PROFILE ON MOUNT ------------------
   useEffect(() => {
     const fetchUser = async () => {
       const token = localStorage.getItem("token");
@@ -53,11 +47,13 @@ export const AuthProvider = ({ children }) => {
 
         localStorage.setItem("user", JSON.stringify(freshUser));
         setUser(freshUser);
+
       } catch (err) {
-        console.error("❌ Error fetching user:", err);
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        setUser(null);
+        console.warn("⚠️ Profile refresh failed, keeping cached user", err);
+
+        // keep user from localStorage instead of deleting
+        const cached = localStorage.getItem("user");
+        if (cached) setUser(JSON.parse(cached));
       } finally {
         setLoading(false);
       }
@@ -66,10 +62,8 @@ export const AuthProvider = ({ children }) => {
     fetchUser();
   }, []);
 
-  // ------------------ LOGIN ------------------
   const login = async (email, password) => {
     const res = await api.post("/auth/login", { email, password });
-
     const token = res.data.token;
 
     const userData = {
@@ -88,10 +82,8 @@ export const AuthProvider = ({ children }) => {
     return userData;
   };
 
-  // ------------------ REGISTER ------------------
   const register = async (name, email, password) => {
     const res = await api.post("/auth/register", { name, email, password });
-
     const token = res.data.token;
 
     const userData = {
@@ -110,7 +102,6 @@ export const AuthProvider = ({ children }) => {
     return userData;
   };
 
-  // ------------------ LOGOUT ------------------
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");

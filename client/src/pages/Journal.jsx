@@ -14,19 +14,17 @@ export default function Journal() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [streak, setStreak] = useState(0);
-  const [badges, setBadges] = useState([]);
-
   const [search, setSearch] = useState("");
   const [filterMood, setFilterMood] = useState("");
 
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
 
-  // Keep only entries from last 30 days
-  const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
+  // Prevent saving to localStorage until we've hydrated from it
+  const hydratedRef = useRef(false);
 
-  // Utility: map mood to numeric value for chart
+  const KEEP_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
   const moodToValue = (m) =>
     m === "happy" ? 4 : m === "neutral" ? 3 : m === "anxious" ? 2 : m === "sad" ? 1 : 0;
 
@@ -39,57 +37,115 @@ export default function Journal() {
     tired: "#A78BFA",
   };
 
-  // Fetch journals + profile on mount
+  // -------------------------
+  // DEBUG: log storage & state (optional, remove later)
   useEffect(() => {
-    const fetchData = async () => {
+    console.log("🟡 localStorage(journals):", localStorage.getItem("journals"));
+    console.log("🟣 React State(journals):", journals);
+  }, [journals]);
+
+  // ---------------------------------------------------------
+  // 1) Hydrate from localStorage ONCE (fast UI)
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("journals");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setJournals(parsed);
+        console.log("📥 Hydrated journals from localStorage:", parsed.length);
+      } else {
+        console.log("❗ No journals in localStorage");
+      }
+    } catch (err) {
+      console.warn("⚠️ Failed to parse cached journals:", err);
+    } finally {
+      // mark hydrated so subsequent changes persist to storage
+      hydratedRef.current = true;
+    }
+  }, []);
+
+  // ---------------------------------------------------------
+  // 2) Persist to localStorage — but ONLY after hydration
+  useEffect(() => {
+    if (!hydratedRef.current) {
+      // skip initial writes before we loaded cached data
+      return;
+    }
+    try {
+      localStorage.setItem("journals", JSON.stringify(journals));
+      // small debug:
+      // console.log("💾 Saved journals to localStorage:", journals.length);
+    } catch (err) {
+      console.error("❌ Failed to save journals to localStorage:", err);
+    }
+  }, [journals]);
+
+  // ---------------------------------------------------------
+  // 3) Fetch backend and MERGE with current state safely
+  useEffect(() => {
+    const fetchAndMerge = async () => {
       const token = localStorage.getItem("token");
       if (!token || token === "null") {
-        setJournals([]);
-        navigate("/login");
+        // do not navigate aggressively if you want offline-first behavior.
+        // For now, we return early to avoid redirect races.
+        console.log("❌ No token found — skipping backend fetch");
         return;
       }
 
       try {
-        const journalRes = await api.get("/journal");
-        // normalize response shape
-        const list = Array.isArray(journalRes.data)
-          ? journalRes.data
-          : journalRes.data?.journals ||
-            journalRes.data?.data ||
-            journalRes.data?.items ||
-            [];
+        const res = await api.get("/journal");
+        const backendList = Array.isArray(res.data)
+          ? res.data
+          : res.data?.journals ?? res.data?.data ?? res.data?.items ?? [];
 
-        // keep only last 30 days (server may already do this; this ensures front-end remains consistent)
+        console.log("🌐 Backend returned", backendList.length, "entries");
+
         const now = Date.now();
-        const recent = list.filter((item) => now - new Date(item.createdAt).getTime() <= KEEP_MS);
+        const backendRecent = backendList.filter(
+          (it) => now - new Date(it.createdAt).getTime() <= KEEP_MS
+        );
 
-        setJournals(recent);
+        // Use current React state as local set (avoid re-reading localStorage which might be overwritten elsewhere)
+        const localCurrent = journals || [];
 
-        // profile data
-        const userRes = await api.get("/users/profile");
-        setStreak(userRes.data.streak || 0);
-        setBadges(userRes.data.badges || []);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        if (err?.response?.status === 401) {
-          localStorage.removeItem("token");
-          navigate("/login");
-        } else {
-          setError("⚠️ Failed to load journals. Please try again.");
+        // Merge backendRecent (prefer server entries) with local entries not present on server
+        const merged = [
+          // Keep server entries first (dedup by _id)
+          ...backendRecent,
+          // Append local entries that server doesn't have
+          ...localCurrent.filter((loc) => !backendRecent.some((b) => b._id === loc._id)),
+        ];
+
+        // If merged is empty but we have localCurrent, keep localCurrent (prevents server-empty wiping)
+        const final = merged.length > 0 ? merged : localCurrent;
+
+        setJournals(final);
+
+        // Ensure persisted storage (we guard save by hydratedRef so it's safe)
+        if (hydratedRef.current) {
+          try {
+            localStorage.setItem("journals", JSON.stringify(final));
+          } catch (err) {
+            /* ignore */
+          }
         }
+      } catch (err) {
+        console.warn("⚠️ Failed to fetch backend journals — keeping local cache", err);
+        // keep local journals (no-op)
       }
     };
 
-    fetchData();
+    // Run fetch after a small microtask to let initial hydration settle
+    // (helps avoid edge timing issues)
+    const t = setTimeout(fetchAndMerge, 50);
+    return () => clearTimeout(t);
+  }, [/* intentionally no dependency on journals to avoid loop */, navigate]);
 
-  }, [navigate]);
-
-  // Prepare chartData from last 30 days and sorted oldest->newest
+  // ---------------------------------------------------------
+  // Prepare chart data (last 30 days, oldest->newest)
   const chartData = journals
     .slice()
-    .filter((e) => {
-      return Date.now() - new Date(e.createdAt).getTime() <= KEEP_MS;
-    })
+    .filter((e) => Date.now() - new Date(e.createdAt).getTime() <= KEEP_MS)
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
     .map((entry) => ({
       date: new Date(entry.createdAt).toLocaleDateString(),
@@ -97,16 +153,16 @@ export default function Journal() {
       value: moodToValue(entry.mood),
     }));
 
-  // Build chart using dynamic import to avoid Chart.js class instantiation issues in some bundlers
+  // ---------------------------------------------------------
+  // Build Chart.js graph
   useEffect(() => {
-    // no canvas or no data -> do nothing (destroy existing chart if present)
     if (!chartRef.current) return;
+
     if (chartInstanceRef.current) {
-      // destroy previous
       try {
         chartInstanceRef.current.destroy();
       } catch (e) {
-        // ignore
+        /* ignore */
       }
       chartInstanceRef.current = null;
     }
@@ -114,18 +170,13 @@ export default function Journal() {
     if (!chartData || chartData.length < 2) return;
 
     let isMounted = true;
-
     (async () => {
       try {
-        // dynamic import
         const ChartModule = await import("chart.js/auto");
         const Chart = ChartModule.default ?? ChartModule.Chart ?? ChartModule;
-
         if (!isMounted) return;
 
         const ctx = chartRef.current.getContext("2d");
-
-        // Build gradient for line as a subtle background (optional)
         const gradient = ctx.createLinearGradient(0, 0, 0, 200);
         gradient.addColorStop(0, "rgba(139,92,246,0.15)");
         gradient.addColorStop(1, "rgba(139,92,246,0.02)");
@@ -146,7 +197,6 @@ export default function Journal() {
                 pointRadius: 6,
                 pointHoverRadius: 8,
                 tension: 0.35,
-                // segment coloring: color segment by starting point mood
                 segment: {
                   borderColor: (ctx) => {
                     const i = ctx.p0DataIndex;
@@ -176,13 +226,8 @@ export default function Journal() {
                       ? "Sad"
                       : "",
                 },
-                grid: {
-                  color: theme === "dark" ? "#444" : "#eee",
-                },
               },
-              x: {
-                grid: { display: false },
-              },
+              x: { grid: { display: false } },
             },
             plugins: {
               legend: { display: false },
@@ -199,7 +244,7 @@ export default function Journal() {
           },
         });
       } catch (err) {
-        console.error("Chart init error:", err);
+        console.error("❌ Chart init error:", err);
       }
     })();
 
@@ -208,15 +253,13 @@ export default function Journal() {
       if (chartInstanceRef.current) {
         try {
           chartInstanceRef.current.destroy();
-        } catch (e) {
-          // noop
-        }
+        } catch (e) {}
         chartInstanceRef.current = null;
       }
     };
-    // rebuild when chartData or theme changes
   }, [chartData, theme]);
 
+  // ---------------------------------------------------------
   // Create new journal entry
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -225,54 +268,52 @@ export default function Journal() {
 
     try {
       const res = await api.post("/journal", { text, mood });
+      const newEntry = res.data?.journal || res.data;
 
-      const newEntry = res.data?.journal || res.data?.data || res.data?.entry || res.data;
+      // update state using functional update to avoid stale closure
+      setJournals((prev) => {
+        const now = Date.now();
+        const updated = [newEntry, ...prev].filter(
+          (it) => now - new Date(it.createdAt).getTime() <= KEEP_MS
+        );
+        return updated;
+      });
 
-      // Append and prune older than 30 days locally:
-      const updated = [newEntry, ...journals];
-      const now = Date.now();
-      const pruned = updated.filter((it) => now - new Date(it.createdAt).getTime() <= KEEP_MS);
-
-      setJournals(pruned);
       setText("");
       setMood("");
-
-      if (res.data.streak !== undefined) setStreak(res.data.streak);
-      if (res.data.badges) setBadges(res.data.badges);
     } catch (err) {
-      console.error("Error saving journal:", err);
-      setError("⚠️ Failed to save journal entry.");
-      if (err?.response?.status === 401) {
-        localStorage.removeItem("token");
-        navigate("/login");
-      }
+      console.error("❌ Error saving journal:", err);
+      setError("Failed to save entry.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Edit entry
+  // ---------------------------------------------------------
+  // Edit an entry
   const handleEdit = async (id, updatedText) => {
     try {
       const res = await api.put(`/journal/${id}`, { text: updatedText });
-      const updated = res.data?.journal || res.data?.data || res.data;
-      setJournals(journals.map((j) => (j._id === id ? updated : j)));
+      const updated = res.data?.journal || res.data;
+      setJournals((prev) => prev.map((j) => (j._id === id ? updated : j)));
     } catch (err) {
-      console.error("Error editing entry:", err);
+      console.error("❌ Edit error:", err);
     }
   };
 
-  // Delete entry
+  // ---------------------------------------------------------
+  // Delete an entry
   const handleDelete = async (id) => {
     try {
       await api.delete(`/journal/${id}`);
-      setJournals(journals.filter((j) => j._id !== id));
+      setJournals((prev) => prev.filter((j) => j._id !== id));
     } catch (err) {
-      console.error("Error deleting entry:", err);
+      console.error("❌ Delete error:", err);
     }
   };
 
-  // Group entries by date for listing
+  // ---------------------------------------------------------
+  // Group entries by date for rendering
   const groupedEntries = journals.reduce((acc, entry) => {
     const date = new Date(entry.createdAt).toLocaleDateString();
     if (!acc[date]) acc[date] = [];
@@ -283,11 +324,13 @@ export default function Journal() {
   const filteredEntries = Object.entries(groupedEntries).map(([date, entries]) => [
     date,
     entries.filter(
-      (e) => (!filterMood || e.mood === filterMood) && e.text.toLowerCase().includes(search.toLowerCase())
+      (e) =>
+        (!filterMood || e.mood === filterMood) &&
+        e.text.toLowerCase().includes(search.toLowerCase())
     ),
   ]);
 
-  // Theme classes
+  // ---------------------------------------------------------
   const pageBg = theme === "dark" ? "bg-gray-900" : "bg-purple-50";
   const cardBg = theme === "dark" ? "bg-gray-800" : "bg-white";
   const borderColor = theme === "dark" ? "border-gray-700" : "border-gray-300";
@@ -297,32 +340,22 @@ export default function Journal() {
     <div className={`${pageBg} p-6 min-h-screen`}>
       <h1 className={`text-2xl font-bold mb-4 ${textColor}`}>My Journal</h1>
 
-      {/* Demo image — using the uploaded container path; your environment/tooling will convert this to a URL */}
-      <div className="mb-6">
-        <img
-          src="/mnt/data/b3f806a1-cbc2-403e-8170-b0363f1b36bc.png"
-          alt="debug"
-          className="w-28 h-28 object-cover rounded-lg shadow"
-        />
-      </div>
-
-      {/* MOOD GRAPH CARD */}
+      {/* Graph */}
       <div className={`${cardBg} border ${borderColor} p-4 rounded-lg shadow mb-6`}>
         <div className="flex items-center justify-between mb-3">
           <h2 className={`text-lg font-bold ${textColor}`}>Mood Trend (Last 30 days)</h2>
           <div className="text-sm text-gray-500">Points colored by mood</div>
         </div>
-
         {chartData.length > 1 ? (
           <div style={{ height: 220 }}>
             <canvas ref={chartRef}></canvas>
           </div>
         ) : (
-          <p className="text-gray-400">Not enough data to show graph (need at least 2 entries).</p>
+          <p className="text-gray-400">Not enough data to show graph.</p>
         )}
       </div>
 
-      {/* FORM */}
+      {/* Form */}
       <form onSubmit={handleSubmit} className="mb-6 space-y-4">
         <textarea
           rows="4"
@@ -332,7 +365,6 @@ export default function Journal() {
           className={`w-full p-3 rounded-lg border ${borderColor} ${cardBg} ${textColor}`}
           required
         />
-
         <div className="flex gap-3 flex-wrap">
           {["happy", "sad", "anxious", "neutral", "tired", "angry"].map((m) => (
             <button
@@ -347,13 +379,12 @@ export default function Journal() {
             </button>
           ))}
         </div>
-
         <button type="submit" disabled={loading} className="px-4 py-2 bg-purple-600 text-white rounded-lg">
           {loading ? "Saving..." : "Save Entry"}
         </button>
       </form>
 
-      {/* FILTERS */}
+      {/* Filters */}
       <div className="mb-6 flex gap-4 flex-wrap">
         <input
           type="text"
@@ -362,7 +393,6 @@ export default function Journal() {
           onChange={(e) => setSearch(e.target.value)}
           className="p-2 rounded-lg border"
         />
-
         <select value={filterMood} onChange={(e) => setFilterMood(e.target.value)} className="p-2 rounded-lg border">
           <option value="">All moods</option>
           <option value="happy">Happy</option>
@@ -374,17 +404,15 @@ export default function Journal() {
         </select>
       </div>
 
-      {/* JOURNAL ENTRIES */}
+      {/* Entries */}
       {filteredEntries.map(([date, entries]) =>
         entries.length > 0 ? (
           <div key={date} className="mb-6">
             <h2 className={`text-lg font-bold mb-3 ${textColor}`}>{date}</h2>
-
             {entries.map((entry) => (
               <div key={entry._id} className={`${cardBg} border ${borderColor} p-4 rounded-lg mb-3`}>
-                <p className={`${textColor}`}>{entry.text}</p>
+                <p className={textColor}>{entry.text}</p>
                 <p className="text-sm mt-1 text-gray-500">Mood: {entry.mood}</p>
-
                 <div className="flex gap-3 mt-2">
                   <button
                     onClick={() => {
@@ -395,7 +423,6 @@ export default function Journal() {
                   >
                     Edit
                   </button>
-
                   <button onClick={() => handleDelete(entry._id)} className="text-red-500 text-sm">
                     Delete
                   </button>

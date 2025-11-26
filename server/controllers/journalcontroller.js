@@ -1,92 +1,90 @@
+import mongoose from "mongoose";
 import Journal from "../models/Journal.js";
 import User from "../models/user.js";
 
-// Normalize user ID from JWT middleware
+// Get normalized User ID
 const getUserIdFromReq = (req) => req.user?._id || req.user?.id;
 
-// --- Create Journal Entry + Update Gamification ---
+/* ------------------------------------------------------------
+   CREATE JOURNAL ENTRY
+------------------------------------------------------------ */
+// ------------------------------------------------------------
+// CREATE JOURNAL ENTRY (FULLY FIXED)
+// ------------------------------------------------------------
 export const createJournal = async (req, res) => {
   try {
     const { text, mood } = req.body;
-    const userId = getUserIdFromReq(req);
 
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
-    if (!text) return res.status(400).json({ error: "Text is required" });
+    // 🔥 REQUIRED FIX — ALWAYS RELY ON JWT
+    const userId = req.user._id;
 
-    // AI reflection
-    let aiResponse = "";
-    if (mood === "happy") aiResponse = "That's great! Keep embracing positivity.";
-    else if (mood === "sad") aiResponse = "It's okay to feel sad. Writing helps.";
-    else if (mood === "anxious") aiResponse = "Take deep breaths. You're doing great.";
-    else aiResponse = "Thanks for sharing your thoughts.";
+    if (!userId) {
+      console.error("❌ No userId from token");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
-    // MUST save using userId (your schema requires this!)
+    if (!text || !mood) {
+      return res.status(400).json({ error: "Text and mood are required" });
+    }
+
+    // TEMP DIAGNOSTIC LOGS
+    console.log("🟣 Creating journal for user:", userId);
+
+    // Save journal entry
     const journal = await Journal.create({
-      userId,
+      userId: new mongoose.Types.ObjectId(userId),   // 👈 FIXED
       text,
       mood,
-      aiResponse,
+      aiResponse: getAiResponse(mood),
     });
 
-    // Update streak and badges
-    const user = await User.findById(userId);
+    console.log("🟢 Saved journal:", journal);
 
-    const today = new Date().toDateString();
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
-
-    if (user.lastJournalDate?.toDateString() === yesterday) {
-      user.streak += 1;
-    } else if (user.lastJournalDate?.toDateString() !== today) {
-      user.streak = 1;
-    }
-
-    user.lastJournalDate = new Date();
-
-    // Badges
-    if (user.streak === 3 && !user.badges.includes("3-day Streak")) {
-      user.badges.push("3-day Streak");
-    }
-    if (user.streak === 7 && !user.badges.includes("1-week Streak")) {
-      user.badges.push("1-week Streak");
-    }
-    if (user.badges.length >= 5 && !user.badges.includes("Collector")) {
-      user.badges.push("Collector");
-    }
-
-    await user.save();
-
-    res.status(201).json({
-      journal,
-      streak: user.streak,
-      badges: user.badges,
-      aiResponse,
-    });
+    res.status(201).json({ journal });
 
   } catch (error) {
-    console.error("Create journal error:", error);
+    console.error("❌ Create journal error:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
 
 
-// --- Get Last 30 Days Journals ---
+// helper for AI text
+const getAiResponse = (mood) => {
+  if (mood === "happy") return "That's great! Keep embracing positivity.";
+  if (mood === "sad") return "It's okay to feel sad. Writing helps.";
+  if (mood === "anxious") return "Take deep breaths. You're doing great.";
+  return "Thanks for sharing your thoughts.";
+};
+
+
+/* ------------------------------------------------------------
+   GET JOURNALS (LAST 30 DAYS)
+------------------------------------------------------------ */
+// ------------------------------------------------------------
+// GET JOURNALS (LAST 30 DAYS)
+// ------------------------------------------------------------
 export const getJournals = async (req, res) => {
   try {
-    const userId = getUserIdFromReq(req);
+    const userId = req.user._id;
 
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    console.log("🔍 Fetching journals for:", userId);
 
-    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const cutoff = new Date(Date.now() - 30*24*60*60*1000);
 
-    // MUST query with userId not user
     const journals = await Journal.find({
-      userId,
-      createdAt: { $gte: cutoff },
+      userId: new mongoose.Types.ObjectId(userId),
+      createdAt: { $gte: cutoff }
     }).sort({ createdAt: -1 });
 
+    console.log("📤 Journals fetched:", journals.length);
+
     res.json(journals);
-  } catch (error) {
-    console.error("Get journals error:", error);
+
+  } catch (err) {
+    console.error("❌ Error fetching journals:", err);
     res.status(500).json({ error: "Server error" });
   }
 };
+
+
