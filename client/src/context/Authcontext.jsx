@@ -22,17 +22,18 @@ export const AuthProvider = ({ children }) => {
 
   const [loading, setLoading] = useState(true);
 
+  // 🔄 Load user on refresh
   useEffect(() => {
     const fetchUser = async () => {
       const token = localStorage.getItem("token");
-
       if (!token || token === "null") {
         setLoading(false);
         return;
       }
 
       try {
-        const res = await api.get("/users/profile");
+        // ✅ match backend route: /auth/profile
+        const res = await api.get("/auth/profile");
 
         const freshUser = {
           _id: res.data._id,
@@ -40,18 +41,13 @@ export const AuthProvider = ({ children }) => {
           email: res.data.email,
           avatar: res.data.avatar,
           theme: res.data.theme,
-          streak: res.data.streak,
-          badges: res.data.badges,
           token,
         };
 
         localStorage.setItem("user", JSON.stringify(freshUser));
         setUser(freshUser);
-
       } catch (err) {
-        console.warn("⚠️ Profile refresh failed, keeping cached user", err);
-
-        // keep user from localStorage instead of deleting
+        console.warn("⚠️ Profile refresh failed", err);
         const cached = localStorage.getItem("user");
         if (cached) setUser(JSON.parse(cached));
       } finally {
@@ -62,10 +58,11 @@ export const AuthProvider = ({ children }) => {
     fetchUser();
   }, []);
 
+  // ✅ LOGIN – matches your controller
   const login = async (email, password) => {
     const res = await api.post("/auth/login", { email, password });
-    const token = res.data.token;
 
+    const token = res.data.token;
     const userData = {
       _id: res.data._id,
       name: res.data.name,
@@ -82,10 +79,11 @@ export const AuthProvider = ({ children }) => {
     return userData;
   };
 
+  // ✅ REGISTER – matches your controller
   const register = async (name, email, password) => {
     const res = await api.post("/auth/register", { name, email, password });
-    const token = res.data.token;
 
+    const token = res.data.token;
     const userData = {
       _id: res.data._id,
       name: res.data.name,

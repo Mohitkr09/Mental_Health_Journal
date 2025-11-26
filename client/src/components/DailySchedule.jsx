@@ -7,17 +7,19 @@ import {
   PenLine,
   Moon,
   Sun,
-  CheckCircle,
+  RefreshCw,
+  CheckCircle2,
 } from "lucide-react";
 import axios from "axios";
+import clsx from "clsx";
 
 const icons = {
-  meditation: <Heart />,
-  movement: <Activity />,
-  food: <Apple />,
-  journal: <PenLine />,
-  sleep: <Moon />,
-  default: <Sun />,
+  meditation: <Heart className="text-pink-500" />,
+  movement: <Activity className="text-blue-500" />,
+  food: <Apple className="text-green-500" />,
+  journal: <PenLine className="text-yellow-500" />,
+  sleep: <Moon className="text-indigo-500" />,
+  default: <Sun className="text-orange-500" />,
 };
 
 export default function DailySchedule({ schedule, onRegenerate }) {
@@ -29,18 +31,18 @@ export default function DailySchedule({ schedule, onRegenerate }) {
 
   if (!localSchedule) return null;
 
-  const total = (localSchedule.items?.length) || 0;
+  const total = localSchedule.items?.length || 0;
   const completedCount = localSchedule.completed?.length || 0;
   const progress = total ? Math.round((completedCount / total) * 100) : 0;
 
   const toggle = async (index) => {
-    // optimistic update
     const wasCompleted = localSchedule.completed?.includes(index);
-    let newCompleted = (localSchedule.completed || []).slice();
-    if (wasCompleted) newCompleted = newCompleted.filter((i) => i !== index);
-    else newCompleted.push(index);
+    let updated = [...localSchedule.completed];
 
-    setLocalSchedule({ ...localSchedule, completed: newCompleted });
+    if (wasCompleted) updated = updated.filter((i) => i !== index);
+    else updated.push(index);
+
+    setLocalSchedule({ ...localSchedule, completed: updated });
 
     try {
       await axios.post(
@@ -49,63 +51,98 @@ export default function DailySchedule({ schedule, onRegenerate }) {
         { headers: { Authorization: `Bearer ${token}` } }
       );
     } catch (err) {
-      console.error("Failed to toggle complete:", err);
-      // revert on error
-      setLocalSchedule({ ...localSchedule, completed: localSchedule.completed });
+      setLocalSchedule({ ...localSchedule });
+      console.error(err);
     }
   };
 
   return (
-    <div className="p-6 bg-white dark:bg-gray-800 shadow-lg rounded-2xl border border-gray-200 dark:border-gray-700">
-      <div className="flex items-center justify-between mb-4">
+    <div className="p-6 rounded-3xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-lg bg-white/60 dark:bg-gray-800/50 transition-all duration-300">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-5">
         <div>
-          <h3 className="text-xl font-semibold">
-            Today — <span className="capitalize text-purple-600">{localSchedule.mood}</span>
+          <h3 className="text-2xl font-semibold tracking-tight">
+            Today’s Plan — 
+            <span className="capitalize text-purple-600 ml-1">
+              {localSchedule.mood}
+            </span>
           </h3>
-          <p className="text-sm text-gray-500">{completedCount} of {total} tasks completed</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {completedCount} of {total} tasks completed
+          </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onRegenerate}
-            className="px-3 py-1 rounded-full bg-purple-600 text-white text-sm hover:bg-purple-700"
-          >
-            Refresh
-          </button>
-        </div>
+        <button
+          onClick={onRegenerate}
+          className="p-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:scale-105 active:scale-95 shadow-lg transition"
+        >
+          <RefreshCw size={18} />
+        </button>
       </div>
 
-      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-4 overflow-hidden">
+      {/* Progress Bar */}
+      <div className="relative h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden mb-6">
         <div
           style={{ width: `${progress}%` }}
-          className="h-2 bg-gradient-to-r from-purple-500 to-indigo-500"
+          className="absolute top-0 left-0 h-full bg-gradient-to-r from-purple-500 to-indigo-500 animate-pulse"
         />
       </div>
 
-      <div className="space-y-3">
+      {/* Tasks */}
+      <div className="space-y-4">
         {localSchedule.items?.map((item, idx) => {
           const done = localSchedule.completed?.includes(idx);
+          const Icon = icons[item.type] || icons.default;
+
           return (
-            <div key={idx} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
-              <div className="flex items-start gap-3">
-                <div className="mt-1">
-                  <input
-                    id={`chk-${idx}`}
-                    type="checkbox"
-                    checked={done}
-                    onChange={() => toggle(idx)}
-                    className="h-4 w-4"
-                  />
+            <div
+              key={idx}
+              className={clsx(
+                "flex justify-between items-center p-4 rounded-2xl border transition-all cursor-pointer shadow-sm",
+                "bg-gray-50/70 dark:bg-gray-900/60 backdrop-blur-md border-gray-200 dark:border-gray-700 hover:shadow-xl",
+                done && "opacity-60 scale-[0.98]"
+              )}
+              onClick={() => toggle(idx)}
+            >
+              {/* Left */}
+              <div className="flex gap-4 items-start">
+                <div className="p-2 rounded-full bg-white dark:bg-gray-800 shadow">
+                  {Icon}
                 </div>
 
                 <div>
-                  <p className={`text-sm font-medium ${done ? "line-through text-gray-400" : ""}`}>{item.title}</p>
-                  {item.description && <p className="text-xs text-gray-500">{item.description}</p>}
-                  {item.durationMins && <p className="text-xs text-gray-400 mt-1">⏱ {item.durationMins} min</p>}
+                  <p
+                    className={clsx(
+                      "font-medium text-sm",
+                      done && "line-through text-gray-400"
+                    )}
+                  >
+                    {item.title}
+                  </p>
+
+                  {item.description && (
+                    <p className="text-xs text-gray-500">{item.description}</p>
+                  )}
+                  {item.durationMins && (
+                    <p className="text-xs text-purple-500 font-medium mt-1">
+                      ⏱ {item.durationMins} min
+                    </p>
+                  )}
                 </div>
               </div>
 
-              <div className="text-sm text-purple-600 font-semibold">{item.time}</div>
+              {/* Right */}
+              <div className="flex items-center gap-3">
+                <span className="text-purple-600 text-sm font-semibold">
+                  {item.time}
+                </span>
+
+                {done ? (
+                  <CheckCircle2 className="text-green-500" size={22} />
+                ) : (
+                  <div className="h-5 w-5 rounded-full border border-purple-500" />
+                )}
+              </div>
             </div>
           );
         })}

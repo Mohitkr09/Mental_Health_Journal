@@ -10,6 +10,7 @@ import {
   PenLine,
   Moon,
   Sun,
+  CheckCircle2,
 } from "lucide-react";
 
 export default function DailyMoodPopup() {
@@ -21,8 +22,7 @@ export default function DailyMoodPopup() {
   const [loading, setLoading] = useState(false);
   const [schedulePopup, setSchedulePopup] = useState(null);
 
-  const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
   const token = localStorage.getItem("token");
 
   const COLORS = {
@@ -35,7 +35,7 @@ export default function DailyMoodPopup() {
   };
 
   const moodEmojis = {
-    happy: "😊",
+    happy: "😄",
     sad: "😢",
     neutral: "😐",
     anxious: "😰",
@@ -43,14 +43,13 @@ export default function DailyMoodPopup() {
     tired: "🥱",
   };
 
-  // Icons for the schedule
   const icons = {
-    meditation: <Heart className="text-blue-500" />,
+    meditation: <Heart className="text-pink-500" />,
     movement: <Activity className="text-green-500" />,
     food: <Apple className="text-orange-500" />,
-    journal: <PenLine className="text-pink-500" />,
-    sleep: <Moon className="text-indigo-500" />,
-    default: <Sun className="text-purple-500" />,
+    journal: <PenLine className="text-purple-500" />,
+    sleep: <Moon className="text-indigo-400" />,
+    default: <Sun className="text-yellow-500" />,
   };
 
   /* -------- Show popup once per day -------- */
@@ -60,55 +59,41 @@ export default function DailyMoodPopup() {
     const today = new Date().toDateString();
 
     if (lastPopup !== today) {
-      setTimeout(() => setIsOpen(true), 1000);
+      setTimeout(() => setIsOpen(true), 900);
     }
   }, [user]);
 
-  /* -------- Save mood + Generate Schedule -------- */
+  /* -------- Save mood + generate schedule -------- */
   const handleSave = async () => {
-    if (!mood) return alert("Please select a mood first 😊");
+    if (!mood) return alert("Please choose a mood first 😄");
 
     setLoading(true);
     try {
-      const entryData = {
+      await addEntry({
         text: `Daily quick log: Feeling ${mood} today.`,
         mood,
         date: new Date().toISOString(),
-      };
+      });
 
-      await addEntry(entryData);
-
-      // Generate schedule from backend
       const res = await axios.post(
         `${API_BASE_URL}/api/schedule`,
         { mood },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      setSchedulePopup(res.data); // full schedule object
-
-      // Mark popup shown for today
-      localStorage.setItem(
-        `lastPopupDate_${user._id}`,
-        new Date().toDateString()
-      );
-
+      setSchedulePopup(res.data);
+      localStorage.setItem(`lastPopupDate_${user._id}`, new Date().toDateString());
       setIsOpen(false);
       setMood("");
     } catch (err) {
-      console.error("❌ Error:", err);
-      alert("Something went wrong while saving your mood.");
+      alert("Unable to save mood. Try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  /* -------- Skip mood selection -------- */
   const handleSkip = () => {
-    localStorage.setItem(
-      `lastPopupDate_${user._id}`,
-      new Date().toDateString()
-    );
+    localStorage.setItem(`lastPopupDate_${user._id}`, new Date().toDateString());
     setIsOpen(false);
   };
 
@@ -116,36 +101,42 @@ export default function DailyMoodPopup() {
 
   return (
     <>
-      {/* ---- Main Mood Popup ---- */}
-      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm">
-        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-2xl w-80 sm:w-96 text-center animate-fadeIn">
-          <h2 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-100">
+      {/* BACKDROP */}
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-[100] animate-fadeIn">
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-2xl w-80 sm:w-96 relative overflow-hidden animate-scaleIn">
+
+          {/* Decorative gradient glow */}
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-400/5 pointer-events-none" />
+
+          <h2 className="relative text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">
             🌞 How are you feeling today?
           </h2>
 
-          <div className="flex flex-wrap justify-center gap-3 mb-4">
+          {/* Mood buttons */}
+          <div className="flex flex-wrap justify-center gap-3 mb-6">
             {Object.keys(COLORS).map((m) => (
               <button
                 key={m}
                 onClick={() => setMood(m)}
                 disabled={loading}
-                className={`px-3 py-2 rounded-full text-white capitalize transition-all duration-150 ${
+                className={`px-4 py-2 rounded-full text-white flex gap-1 items-center text-sm shadow-md active:scale-95 transition-all ${
                   mood === m
-                    ? "ring-2 ring-purple-500 scale-110 shadow-md"
+                    ? "ring-4 ring-purple-500/60 scale-110"
                     : "hover:scale-105"
                 }`}
                 style={{ backgroundColor: COLORS[m] }}
               >
-                {moodEmojis[m]} {m}
+                <span className="text-md animate-bounce">{moodEmojis[m]}</span>
+                {m}
               </button>
             ))}
           </div>
 
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end mt-2 gap-3">
             <button
               onClick={handleSkip}
               disabled={loading}
-              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all"
+              className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
             >
               Skip
             </button>
@@ -153,58 +144,60 @@ export default function DailyMoodPopup() {
             <button
               onClick={handleSave}
               disabled={loading}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-all disabled:opacity-60"
+              className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition shadow-md flex items-center gap-2 disabled:opacity-60"
             >
-              {loading ? "Saving..." : "Save"}
+              {loading ? (
+                <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+              ) : (
+                <CheckCircle2 size={16} />
+              )}
+              Save
             </button>
           </div>
         </div>
       </div>
 
-      {/* ---- Schedule Popup ---- */}
+      {/* ===== Schedule POPUP ===== */}
       {schedulePopup && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-xl w-[90%] sm:w-96">
-            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">
-              📝 Your Wellness Schedule for Today
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm z-[110] animate-fadeIn">
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-2xl w-[90%] sm:w-96 animate-scaleIn">
+
+            <h2 className="text-xl font-bold mb-3 text-gray-900 dark:text-gray-100">
+              📝 Your Wellness Plan
             </h2>
 
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
               {schedulePopup.items.map((item, idx) => (
                 <div
                   key={idx}
-                  className="p-3 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 flex justify-between items-start"
+                  className="p-3 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex justify-between items-center hover:shadow-md hover:border-purple-400 transition"
                 >
                   <div className="flex gap-3">
-                    <div className="p-2 rounded-md bg-white dark:bg-gray-700 shadow">
+                    <div className="p-2 rounded-md bg-white dark:bg-gray-700 shadow-md">
                       {icons[item.type] || icons.default}
                     </div>
 
                     <div>
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-200">
+                      <p className="text-sm font-semibold">
                         {item.title}
                       </p>
                       <p className="text-xs text-gray-600 dark:text-gray-400">
                         {item.description}
                       </p>
                       {item.durationMins && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          ⏱ {item.durationMins} min
-                        </p>
+                        <p className="text-xs text-purple-500 mt-1">⏱ {item.durationMins} min</p>
                       )}
                     </div>
                   </div>
 
-                  <span className="text-purple-600 dark:text-purple-400 text-sm font-bold">
-                    {item.time}
-                  </span>
+                  <span className="text-purple-600 font-semibold text-sm">{item.time}</span>
                 </div>
               ))}
             </div>
 
             <button
               onClick={() => setSchedulePopup(null)}
-              className="mt-5 w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-all"
+              className="mt-5 w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition shadow-md"
             >
               Close
             </button>
