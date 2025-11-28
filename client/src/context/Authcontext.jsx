@@ -5,15 +5,21 @@ import api from "../utils/api.js";
 const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
+// Check if JWT expired (Decodes exp timestamp)
+const isTokenExpired = (token) => {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.exp * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem("user");
-    if (!saved || saved === "undefined") {
-      localStorage.removeItem("user");
-      return null;
-    }
     try {
-      return JSON.parse(saved);
+      const raw = localStorage.getItem("user");
+      return raw ? JSON.parse(raw) : null;
     } catch {
       localStorage.removeItem("user");
       return null;
@@ -22,20 +28,22 @@ export const AuthProvider = ({ children }) => {
 
   const [loading, setLoading] = useState(true);
 
-  // 🔄 Load user on refresh
+  /* --------------------------------------------------
+     LOAD USER ON PAGE REFRESH
+  ---------------------------------------------------*/
   useEffect(() => {
-    const fetchUser = async () => {
-      const token = localStorage.getItem("token");
-      if (!token || token === "null") {
-        setLoading(false);
-        return;
-      }
+    const token = localStorage.getItem("token");
+    if (!token || isTokenExpired(token)) {
+      logout();
+      setLoading(false);
+      return;
+    }
 
+    const fetchProfile = async () => {
       try {
-        // ✅ match backend route: /auth/profile
         const res = await api.get("/auth/profile");
 
-        const freshUser = {
+        const profile = {
           _id: res.data._id,
           name: res.data.name,
           email: res.data.email,
@@ -44,26 +52,34 @@ export const AuthProvider = ({ children }) => {
           token,
         };
 
-        localStorage.setItem("user", JSON.stringify(freshUser));
-        setUser(freshUser);
-      } catch (err) {
-        console.warn("⚠️ Profile refresh failed", err);
-        const cached = localStorage.getItem("user");
-        if (cached) setUser(JSON.parse(cached));
+        localStorage.setItem("user", JSON.stringify(profile));
+        setUser(profile);
+      } catch (error) {
+        console.warn("⚠️ Profile fetch failed:", error.message);
+        logout();
       } finally {
         setLoading(false);
       }
     };
 
-    fetchUser();
+    fetchProfile();
   }, []);
 
-  // ✅ LOGIN – matches your controller
+  /* --------------------------------------------------
+     LOGIN — FIXED (NOW SENDS JSON HEADERS)
+  ---------------------------------------------------*/
   const login = async (email, password) => {
-    const res = await api.post("/auth/login", { email, password });
+    const res = await api.post(
+      "/auth/login",
+      { email, password },
+      {
+        headers: { "Content-Type": "application/json" },
+        withCredentials: true,
+      }
+    );
 
     const token = res.data.token;
-    const userData = {
+    const data = {
       _id: res.data._id,
       name: res.data.name,
       email: res.data.email,
@@ -73,18 +89,26 @@ export const AuthProvider = ({ children }) => {
     };
 
     localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify(userData));
-    setUser(userData);
-
-    return userData;
+    localStorage.setItem("user", JSON.stringify(data));
+    setUser(data);
+    return data;
   };
 
-  // ✅ REGISTER – matches your controller
+  /* --------------------------------------------------
+     REGISTER — WITH JSON HEADERS
+  ---------------------------------------------------*/
   const register = async (name, email, password) => {
-    const res = await api.post("/auth/register", { name, email, password });
+    const res = await api.post(
+      "/auth/register",
+      { name, email, password },
+      {
+        headers: { "Content-Type": "application/json" },
+        withCredentials: true,
+      }
+    );
 
     const token = res.data.token;
-    const userData = {
+    const data = {
       _id: res.data._id,
       name: res.data.name,
       email: res.data.email,
@@ -94,12 +118,14 @@ export const AuthProvider = ({ children }) => {
     };
 
     localStorage.setItem("token", token);
-    localStorage.setItem("user", JSON.stringify(userData));
-    setUser(userData);
-
-    return userData;
+    localStorage.setItem("user", JSON.stringify(data));
+    setUser(data);
+    return data;
   };
 
+  /* --------------------------------------------------
+     LOGOUT
+  ---------------------------------------------------*/
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -108,9 +134,16 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, register, logout, setUser }}
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        setUser,
+      }}
     >
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 };

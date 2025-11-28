@@ -24,28 +24,30 @@ const app = express();
    CORS CONFIG — FIXED FOR PROD + DEV
 ---------------------------------------------------*/
 const allowedOrigins = [
-  process.env.CLIENT_URL,       // production frontend
-  "http://localhost:5173",      // local dev
+  process.env.CLIENT_URL,
+  "http://localhost:5173",
+  "https://mental-health-journal-1c2a.onrender.com",
 ].filter(Boolean);
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (mobile apps, curl, etc.)
+    origin(origin, callback) {
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        console.warn(`🚫 CORS blocked origin: ${origin}`);
-        return callback(new Error("Not allowed by CORS"));
-      }
+      const cleanOrigin = origin.replace(/\/$/, ""); // remove trailing slash
+      const isAllowed = allowedOrigins.some((o) =>
+        cleanOrigin.startsWith(o.replace(/\/$/, ""))
+      );
+
+      if (isAllowed) return callback(null, true);
+
+      console.warn(`🚫 CORS BLOCKED: ${origin}`);
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
   })
 );
 
-console.log("🌍 CORS allowed origins:", allowedOrigins);
 
 /* --------------------------------------------------
    MIDDLEWARE
@@ -89,9 +91,7 @@ app.get("/", (req, res) => {
   res.json({ status: "ok", message: "🚀 API is running" });
 });
 
-/* --------------------------------------------------
-   GLOBAL ERROR HANDLER
----------------------------------------------------*/
+
 app.use((err, req, res, next) => {
   console.error("❌ Server error:", err.message || err);
   res.status(err.status || 500).json({
@@ -99,8 +99,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-/* --------------------------------------------------
-   START SERVER
----------------------------------------------------*/
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

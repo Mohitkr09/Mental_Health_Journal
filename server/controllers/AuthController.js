@@ -22,46 +22,67 @@ const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
 
 // ---------------- REGISTER ----------------
+// ---------------- REGISTER USER (FINAL UPDATED CODE) ----------------
 export const registerUser = async (req, res) => {
   try {
+    console.log("📨 Register request:", req.body);
+
     const { name, email, password, avatar, theme } = req.body;
-    const existingUser = await User.findOne({ email });
-    if (existingUser)
-      return res.status(400).json({ message: "User already exists" });
 
-    const user = await User.create({
-      name,
-      email,
-      password,
-      avatar: avatar || "",
-      theme:
-        theme && ["light", "dark", "system"].includes(theme)
-          ? theme
-          : "light",
-    });
-
-    try {
-      await transporter.sendMail({
-        from: `"MindCare" <${process.env.EMAIL_USER}>`,
-        to: user.email,
-        subject: "🎉 Welcome to MindCare!",
-        html: `
-          <h2>Hi ${user.name},</h2>
-          <p>Welcome to <b>MindCare</b> ✨</p>
-          <p>Start journaling today and track your mood daily.</p>
-          <a href="${process.env.CLIENT_URL}/login"
-             style="padding:10px 20px;background:#6D28D9;color:#fff;text-decoration:none;border-radius:6px;">
-            Login Now
-          </a>
-          <p style="margin-top:20px;color:gray;font-size:12px;">
-            If you didn’t sign up for MindCare, ignore this email.
-          </p>
-        `,
-      });
-    } catch (mailErr) {
-      console.warn("⚠️ Email send error:", mailErr.message);
+    // 🛑 Validate fields
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Name, email and password are required" });
     }
 
+    // 🔎 Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      console.warn("⚠️ Email already registered:", email);
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    // 🏗 Create new user and hash password using .save()
+    const user = new User({
+      name,
+      email,
+      password, // raw password — will be hashed by pre('save') middleware
+      avatar: avatar || "",
+      theme: ["light", "dark", "system"].includes(theme) ? theme : "light",
+    });
+
+    await user.save(); // 🔐 ensures password hashing occurs
+
+    console.log("✅ User created:", user._id.toString());
+
+    // 📧 Send Welcome Email (non-blocking, optional)
+    if (process.env.EMAIL_USER && transporter) {
+      transporter
+        .sendMail({
+          from: `"MindCare" <${process.env.EMAIL_USER}>`,
+          to: user.email,
+          subject: "🎉 Welcome to MindCare!",
+          html: `
+            <h2>Hello ${user.name},</h2>
+            <p>Welcome to <strong>MindCare</strong> 🌱</p>
+            <p>Your wellness journey just began!</p>
+            <a href="${process.env.CLIENT_URL || ""}/login"
+              style="padding:10px 18px;background:#6D28D9;color:#fff;
+              border-radius:8px;text-decoration:none;font-size:14px;">
+              Login Now
+            </a>
+            <br/><br/>
+            <small style="color:gray;">
+              If you didn’t create this account, you may safely ignore this email.
+            </small>
+          `,
+        })
+        .then(() => console.log("📨 Welcome email sent to:", user.email))
+        .catch((err) => console.warn("⚠️ Email send error:", err.message));
+    } else {
+      console.log("📭 Skipping welcome email — EMAIL_USER not configured");
+    }
+
+    // 🎫 Return response
     res.status(201).json({
       _id: user._id,
       name: user.name,
@@ -70,19 +91,31 @@ export const registerUser = async (req, res) => {
       theme: user.theme,
       token: generateToken(user._id),
     });
+
   } catch (error) {
-    console.error("❌ Register error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("❌ REGISTER CRASH:", error.message);
+    res.status(500).json({
+      message: "Registration failed",
+      error: error.message,
+    });
   }
 };
 
-// ---------------- LOGIN ----------------
+
+
 export const loginUser = async (req, res) => {
   try {
+    console.log("LOGIN BODY:", req.body);
+
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
-    if (!user || !(await user.matchPassword(password)))
-      return res.status(401).json({ message: "Invalid email or password" });
+    if (!email || !password)
+      return res.status(400).json({ message: "Email and password required" });
+
+    const user = await User.findOne({ email }).select("+password");
+    if (!user) return res.status(401).json({ message: "Invalid credentials" });
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
     res.json({
       _id: user._id,
@@ -92,11 +125,16 @@ export const loginUser = async (req, res) => {
       theme: user.theme,
       token: generateToken(user._id),
     });
+
   } catch (error) {
-    console.error("❌ Login error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("❌ LOGIN ERROR:", error.message);
+    res.status(500).json({ message: "Server crash", error: error.message });
   }
 };
+
+
+
+
 
 // ---------------- PROFILE ----------------
 export const getUserProfile = async (req, res) => {
