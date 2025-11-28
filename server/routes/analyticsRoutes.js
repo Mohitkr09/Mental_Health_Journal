@@ -1,6 +1,6 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
-import Journal from "../models/journal.js";
+import Journal from "../models/Journal.js";
 import OpenAI from "openai";
 
 const router = express.Router();

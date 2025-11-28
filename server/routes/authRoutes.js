@@ -17,7 +17,7 @@ import {
   chatHandler,
 } from "../controllers/AuthController.js";
 
-import { protect } from "../middleware/authMiddleware.js";
+import { protect } from "../middleware/authmiddleware.js";
 import parser from "../middleware/upload.js";
 import audioUpload from "../middleware/uploadAudio.js";
 import User from "../models/user.js";
