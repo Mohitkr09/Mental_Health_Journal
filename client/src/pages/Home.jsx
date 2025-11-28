@@ -12,7 +12,6 @@ import qrcode from "../assets/qrcode.png";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
-
 export default function Home() {
   const { addEntry } = useJournal();
   const { user } = useAuth();
@@ -49,8 +48,7 @@ export default function Home() {
   // Dashboard stats
   const [completedMap, setCompletedMap] = useState({}); // { time_taskId: true }
   const completedCount = useMemo(
-    () =>
-      Object.values(completedMap).filter(Boolean).length,
+    () => Object.values(completedMap).filter(Boolean).length,
     [completedMap]
   );
 
@@ -71,7 +69,7 @@ export default function Home() {
     if (!user) return;
     setLoadingSchedule(true);
     try {
-const res = await api.get("/schedule"); // ✅
+      const res = await api.get("/schedule"); // ✅
       setSchedule(res.data || null);
       setRecommendations(generateRecommendations(res.data?.mood, res.data));
     } catch (err) {
@@ -83,7 +81,9 @@ const res = await api.get("/schedule"); // ✅
 
   useEffect(() => {
     fetchSchedule();
-    return () => notificationIntervalRef.current && clearInterval(notificationIntervalRef.current);
+    return () =>
+      notificationIntervalRef.current &&
+      clearInterval(notificationIntervalRef.current);
   }, [user]);
 
   /** =========================================================
@@ -135,7 +135,8 @@ const res = await api.get("/schedule"); // ✅
 
   const showBrowserNotification = async (title, body) => {
     if (!("Notification" in window)) return;
-    if (Notification.permission === "granted") new Notification(title, { body });
+    if (Notification.permission === "granted")
+      new Notification(title, { body });
     else if (await requestNotificationPermission())
       new Notification(title, { body });
   };
@@ -152,9 +153,11 @@ const res = await api.get("/schedule"); // ✅
 
     if (newVal) {
       await requestNotificationPermission();
-      if (notificationIntervalRef.current) clearInterval(notificationIntervalRef.current);
+      if (notificationIntervalRef.current)
+        clearInterval(notificationIntervalRef.current);
       notificationIntervalRef.current = setInterval(() => {
-        const tip = wellnessTips[Math.floor(Math.random() * wellnessTips.length)];
+        const tip =
+          wellnessTips[Math.floor(Math.random() * wellnessTips.length)];
         showBrowserNotification("MindCare Reminder", tip);
         showInAppNotification(tip);
       }, 60 * 60 * 1000);
@@ -182,9 +185,13 @@ const res = await api.get("/schedule"); // ✅
 
   const timelineItems = useMemo(() => getTimelineItems(schedule), [schedule]);
 
+  // PERMANENT completion (no undo)
   const toggleComplete = (task) => {
     const key = `${task.time}_${task.title}`;
-    setCompletedMap((prev) => ({ ...prev, [key]: !prev[key] }));
+    setCompletedMap((prev) => {
+      if (prev[key]) return prev; // already completed → do nothing
+      return { ...prev, [key]: true }; // mark once
+    });
   };
 
   // ===== AI Recommendations (local mock) =====
@@ -204,45 +211,85 @@ const res = await api.get("/schedule"); // ✅
     switch (mood) {
       case "anxious":
         recs.push(
-          { title: "Micro-breathing", text: "Box breathe: 4s in, hold 4s, 4s out — repeat 4 times." },
-          { title: "Grounding", text: "Use 5-4-3-2-1: name 5 things you see, 4 you can touch..." },
-          { title: "Sleep tip", text: "Avoid screens 30 min before bed — try warm drink or reading." }
+          {
+            title: "Micro-breathing",
+            text: "Box breathe: 4s in, hold 4s, 4s out — repeat 4 times.",
+          },
+          {
+            title: "Grounding",
+            text: "Use 5-4-3-2-1: name 5 things you see, 4 you can touch...",
+          },
+          {
+            title: "Sleep tip",
+            text: "Avoid screens 30 min before bed — try warm drink or reading.",
+          }
         );
         break;
       case "sad":
         recs.push(
-          { title: "Gentle activation", text: "Try a 10-minute slow walk or light stretching to lift energy." },
-          { title: "Reach out", text: "Message a trusted friend or schedule a short call." }
+          {
+            title: "Gentle activation",
+            text: "Try a 10-minute slow walk or light stretching to lift energy.",
+          },
+          {
+            title: "Reach out",
+            text: "Message a trusted friend or schedule a short call.",
+          }
         );
         break;
       case "tired":
         recs.push(
-          { title: "Prioritize sleep", text: "Aim for consistent sleep times — wind down 60 minutes before bed." },
-          { title: "Nap smart", text: "If napping, keep it <= 20 minutes and not too late in the day." }
+          {
+            title: "Prioritize sleep",
+            text: "Aim for consistent sleep times — wind down 60 minutes before bed.",
+          },
+          {
+            title: "Nap smart",
+            text: "If napping, keep it <= 20 minutes and not too late in the day.",
+          }
         );
         break;
       case "angry":
         recs.push(
-          { title: "Energy release", text: "Try 5–10 minutes of vigorous movement like fast walking or jumping jacks." },
-          { title: "Delay reaction", text: "Pause and breathe before responding; use 'I'll get back to you' when needed." }
+          {
+            title: "Energy release",
+            text: "Try 5–10 minutes of vigorous movement like fast walking or jumping jacks.",
+          },
+          {
+            title: "Delay reaction",
+            text: "Pause and breathe before responding; use 'I'll get back to you' when needed.",
+          }
         );
         break;
       case "happy":
         recs.push(
-          { title: "Amplify wellbeing", text: "Write 3 things you’re grateful for — share one with someone." },
-          { title: "Share joy", text: "Consider helping someone — small acts increase connection." }
+          {
+            title: "Amplify wellbeing",
+            text: "Write 3 things you’re grateful for — share one with someone.",
+          },
+          {
+            title: "Share joy",
+            text: "Consider helping someone — small acts increase connection.",
+          }
         );
         break;
       default:
-        recs.push(
-          { title: "Balanced day", text: "Stay hydrated, choose a protein-packed breakfast and a midday walk." }
-        );
+        recs.push({
+          title: "Balanced day",
+          text: "Stay hydrated, choose a protein-packed breakfast and a midday walk.",
+        });
     }
 
     // Add schedule-based quick tips
     const tasks = (scheduleObj?.items || scheduleObj?.tasks || []).slice(0, 3);
     if (tasks.length) {
-      recs.push({ title: "Quick wins", text: `Try completing: ${tasks.map(t => t.title || t.task || t.name).slice(0,3).join(", ")}` });
+      recs.push({
+        title: "Quick wins",
+        text: `Try completing: ${tasks
+          .map((t) => t.title || t.task || t.name)
+          .slice(0, 3)
+          .join(", ")}`,
+      });
     }
 
     return recs;
@@ -258,21 +305,42 @@ const res = await api.get("/schedule"); // ✅
     return (
       <div className="flex gap-3 items-start">
         <div className="mt-1">
-          <div className={`w-3 h-3 rounded-full ${completed ? "bg-green-500" : "bg-purple-500"}`} />
+          <div
+            className={`w-3 h-3 rounded-full ${
+              completed ? "bg-green-500" : "bg-purple-500"
+            }`}
+          />
         </div>
         <div className="flex-1">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <div>
-              <p className={`font-semibold text-sm ${completed ? "line-through text-gray-400" : ""}`}>{item.title}</p>
-              {item.description && <p className="text-xs text-gray-500 dark:text-gray-400">{item.description}</p>}
+              <p
+                className={`font-semibold text-sm ${
+                  completed ? "line-through text-gray-400" : ""
+                }`}
+              >
+                {item.title}
+              </p>
+              {item.description && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {item.description}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{item.time || "—"}</span>
+              <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                {item.time || "—"}
+              </span>
               <button
                 onClick={() => toggleComplete(item)}
-                className={`px-2 py-1 text-xs rounded ${completed ? "bg-gray-200 dark:bg-gray-700" : "bg-purple-600 text-white"}`}
+                disabled={completed}
+                className={`px-2 py-1 text-xs rounded ${
+                  completed
+                    ? "bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed"
+                    : "bg-purple-600 text-white hover:bg-purple-700"
+                }`}
               >
-                {completed ? "Undo" : "Done"}
+                {completed ? "Completed" : "Done"}
               </button>
             </div>
           </div>
@@ -301,9 +369,16 @@ const res = await api.get("/schedule"); // ✅
           <div className="flex justify-between items-start gap-2">
             <div className="flex-1">
               <p className="text-sm font-semibold">MindCare</p>
-              <p className="text-xs text-gray-600 dark:text-gray-300">A gentle reminder to care for yourself.</p>
+              <p className="text-xs text-gray-600 dark:text-gray-300">
+                A gentle reminder to care for yourself.
+              </p>
             </div>
-            <button onClick={dismissInAppNotification} className="text-xs text-gray-500">Close</button>
+            <button
+              onClick={dismissInAppNotification}
+              className="text-xs text-gray-500"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
@@ -311,11 +386,14 @@ const res = await api.get("/schedule"); // ✅
       <main className="flex flex-col items-center flex-1 text-center px-4 sm:px-6 lg:px-12 py-8">
         <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold leading-snug sm:leading-tight mt-6">
           Welcome to{" "}
-          <span className="text-purple-600 dark:text-purple-400">MindCare</span>{" "}
+          <span className="text-purple-600 dark:text-purple-400">
+            MindCare
+          </span>{" "}
           ✨
         </h2>
         <p className="mt-4 sm:mt-6 text-base sm:text-lg lg:text-xl max-w-xl sm:max-w-2xl">
-          Your private AI-enhanced journaling guide to heal, grow, and flourish.
+          Your private AI-enhanced journaling guide to heal, grow, and
+          flourish.
         </p>
 
         {/* Top controls row: notifications toggle + small dashboard */}
@@ -325,7 +403,9 @@ const res = await api.get("/schedule"); // ✅
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">Today's Mood</p>
-                <p className="text-lg font-semibold">{(schedule && schedule.mood) ? schedule.mood : "Not set"}</p>
+                <p className="text-lg font-semibold">
+                  {schedule && schedule.mood ? schedule.mood : "Not set"}
+                </p>
               </div>
 
               <div className="flex flex-col items-end">
@@ -337,11 +417,15 @@ const res = await api.get("/schedule"); // ✅
             <div className="mt-4 grid grid-cols-2 gap-2">
               <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded">
                 <p className="text-xs text-gray-500">Sleep suggestion</p>
-                <p className="text-sm font-medium mt-1">{schedule?.sleepTip ?? "Aim 7-9 hours"}</p>
+                <p className="text-sm font-medium mt-1">
+                  {schedule?.sleepTip ?? "Aim 7-9 hours"}
+                </p>
               </div>
               <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded">
                 <p className="text-xs text-gray-500">Stress score</p>
-                <p className="text-sm font-medium mt-1">{schedule?.stressScore ?? "—"}</p>
+                <p className="text-sm font-medium mt-1">
+                  {schedule?.stressScore ?? "—"}
+                </p>
               </div>
             </div>
           </div>
@@ -352,18 +436,24 @@ const res = await api.get("/schedule"); // ✅
               <p className="text-sm font-semibold">Notifications</p>
               <button
                 onClick={toggleNotifications}
-                className={`px-3 py-1 rounded-full text-xs ${notificationsEnabled ? "bg-green-500 text-white" : "bg-gray-200 dark:bg-gray-700"}`}
+                className={`px-3 py-1 rounded-full text-xs ${
+                  notificationsEnabled
+                    ? "bg-green-500 text-white"
+                    : "bg-gray-200 dark:bg-gray-700"
+                }`}
               >
                 {notificationsEnabled ? "On" : "Off"}
               </button>
             </div>
 
-            <p className="text-xs text-gray-500">Receive gentle reminders and tips during the day.</p>
+            <p className="text-xs text-gray-500">
+              Receive gentle reminders and tips during the day.
+            </p>
 
             <button
               onClick={() => {
-                // quick tip trigger
-                const tip = wellnessTips[Math.floor(Math.random() * wellnessTips.length)];
+                const tip =
+                  wellnessTips[Math.floor(Math.random() * wellnessTips.length)];
                 showBrowserNotification("MindCare Tip", tip);
                 showInAppNotification(tip);
               }}
@@ -375,7 +465,12 @@ const res = await api.get("/schedule"); // ✅
             {/* DEV: link to debug audio file uploaded during testing */}
             <div className="mt-2 text-xs text-gray-400">
               Dev file:{" "}
-              <a href={debugAudioLocalPath} className="underline text-purple-600" target="_blank" rel="noreferrer">
+              <a
+                href={debugAudioLocalPath}
+                className="underline text-purple-600"
+                target="_blank"
+                rel="noreferrer"
+              >
                 debug_audio.wav
               </a>
             </div>
@@ -405,7 +500,9 @@ const res = await api.get("/schedule"); // ✅
           </div>
 
           {loadingSchedule ? (
-            <div className="text-center text-gray-500">Loading schedule...</div>
+            <div className="text-center text-gray-500">
+              Loading schedule...
+            </div>
           ) : schedule ? (
             <>
               <DailySchedule
@@ -419,12 +516,19 @@ const res = await api.get("/schedule"); // ✅
                   <h4 className="text-lg font-semibold mb-3">Timeline</h4>
 
                   {timelineItems.length === 0 ? (
-                    <p className="text-sm text-gray-500">No timeline items available.</p>
+                    <p className="text-sm text-gray-500">
+                      No timeline items available.
+                    </p>
                   ) : (
                     <div className="space-y-3">
                       {timelineItems.map((it) => (
-                        <div key={it.id} className="flex items-start gap-3">
-                          <div className="w-12 text-xs text-gray-500">{it.time || "—"}</div>
+                        <div
+                          key={it.id}
+                          className="flex items-start gap-3"
+                        >
+                          <div className="w-12 text-xs text-gray-500">
+                            {it.time || "—"}
+                          </div>
                           <div className="flex-1">
                             <TimelineItem item={it} />
                           </div>
@@ -438,18 +542,22 @@ const res = await api.get("/schedule"); // ✅
           ) : (
             <div className="p-4 rounded-xl bg-white dark:bg-gray-800 shadow-md border dark:border-gray-700 text-center">
               <p className="mb-3">No schedule created for today.</p>
-              <p className="mb-4 text-sm text-gray-500">Select a mood to generate a personalized plan:</p>
+              <p className="mb-4 text-sm text-gray-500">
+                Select a mood to generate a personalized plan:
+              </p>
 
               <div className="flex flex-wrap justify-center gap-3">
-                {["happy", "neutral", "anxious", "sad", "tired", "angry"].map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => generateSchedule(m)}
-                    className="px-4 py-2 rounded-full bg-purple-600 text-white hover:bg-purple-700 transition text-sm"
-                  >
-                    Generate for {m}
-                  </button>
-                ))}
+                {["happy", "neutral", "anxious", "sad", "tired", "angry"].map(
+                  (m) => (
+                    <button
+                      key={m}
+                      onClick={() => generateSchedule(m)}
+                      className="px-4 py-2 rounded-full bg-purple-600 text-white hover:bg-purple-700 transition text-sm"
+                    >
+                      Generate for {m}
+                    </button>
+                  )
+                )}
               </div>
             </div>
           )}
@@ -457,21 +565,29 @@ const res = await api.get("/schedule"); // ✅
 
         {/* RECOMMENDATIONS */}
         <section className="w-full max-w-4xl mb-16 px-4">
-          <h3 className="text-2xl font-bold text-left mb-4">AI Recommendations</h3>
+          <h3 className="text-2xl font-bold text-left mb-4">
+            AI Recommendations
+          </h3>
 
           {recommendations.length === 0 ? (
-            <p className="text-sm text-gray-500">No recommendations yet — generate a schedule or pick a mood.</p>
+            <p className="text-sm text-gray-500">
+              No recommendations yet — generate a schedule or pick a mood.
+            </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {recommendations.map((r, i) => (
-                <div key={i} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border dark:border-gray-700">
+                <div
+                  key={i}
+                  className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border dark:border-gray-700"
+                >
                   <p className="font-semibold">{r.title}</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">{r.text}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
+                    {r.text}
+                  </p>
                 </div>
               ))}
             </div>
           )}
-
         </section>
 
         {/* Featured Guides */}
@@ -552,7 +668,8 @@ const res = await api.get("/schedule"); // ✅
                 Gentle Notifications
               </h4>
               <p className="text-gray-600 dark:text-gray-400 text-sm max-w-xs">
-                Receive mindful reminders to reflect on your thoughts and emotions.
+                Receive mindful reminders to reflect on your thoughts and
+                emotions.
               </p>
             </div>
 
@@ -579,7 +696,8 @@ const res = await api.get("/schedule"); // ✅
                 Voice Powered Coaching
               </h4>
               <p className="text-gray-600 dark:text-gray-400 text-sm max-w-xs">
-                Speak freely and let AI-powered voice sessions guide your growth.
+                Speak freely and let AI-powered voice sessions guide your
+                growth.
               </p>
             </div>
           </div>
@@ -594,10 +712,21 @@ const res = await api.get("/schedule"); // ✅
             <span className="font-semibold text-purple-600 dark:text-purple-400">
               MindCare
             </span>
-            , you agree to the storing of cookies on your device to enhance navigation, analyze site usage, and support our mindful community. Read our{" "}
-            <a href="/privacy" className="text-purple-600 dark:text-purple-400 underline">Privacy Policy</a> for more information.
+            , you agree to the storing of cookies on your device to enhance
+            navigation, analyze site usage, and support our mindful community.
+            Read our{" "}
+            <a
+              href="/privacy"
+              className="text-purple-600 dark:text-purple-400 underline"
+            >
+              Privacy Policy
+            </a>{" "}
+            for more information.
           </p>
-          <button onClick={handleConsent} className="px-4 sm:px-5 py-2 rounded-full bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 transition text-sm sm:text-base">
+          <button
+            onClick={handleConsent}
+            className="px-4 sm:px-5 py-2 rounded-full bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 transition text-sm sm:text-base"
+          >
             Understood
           </button>
         </div>
@@ -606,8 +735,16 @@ const res = await api.get("/schedule"); // ✅
       {/* App Download / Mockup Section */}
       <section className="relative mt-20 mb-16 bg-gradient-to-br from-purple-100 via-white to-purple-50 dark:from-gray-800 dark:via-gray-900 dark:to-gray-800 rounded-3xl shadow-lg overflow-hidden mx-4 sm:mx-8 lg:mx-20 p-8 sm:p-12 flex flex-col md:flex-row items-center justify-between gap-10 transition-all duration-500">
         <div className="relative w-full md:w-1/2 flex justify-center">
-          <img src="/assets/mockup1.png" alt="App Mockup 1" className="w-48 sm:w-60 md:w-64 lg:w-72 rounded-[2.5rem] shadow-2xl transform hover:-translate-y-2 hover:rotate-2 transition duration-500" />
-          <img src="/assets/mockup2.png" alt="App Mockup 2" className="absolute bottom-[-1rem] left-16 w-36 sm:w-48 md:w-56 lg:w-64 rounded-[2.5rem] shadow-2xl transform hover:-translate-y-3 -rotate-6 transition duration-500 hidden sm:block" />
+          <img
+            src="/assets/mockup1.png"
+            alt="App Mockup 1"
+            className="w-48 sm:w-60 md:w-64 lg:w-72 rounded-[2.5rem] shadow-2xl transform hover:-translate-y-2 hover:rotate-2 transition duration-500"
+          />
+          <img
+            src="/assets/mockup2.png"
+            alt="App Mockup 2"
+            className="absolute bottom-[-1rem] left-16 w-36 sm:w-48 md:w-56 lg:w-64 rounded-[2.5rem] shadow-2xl transform hover:-translate-y-3 -rotate-6 transition duration-500 hidden sm:block"
+          />
         </div>
 
         <div className="text-center md:text-left w-full md:w-1/2">
@@ -616,21 +753,46 @@ const res = await api.get("/schedule"); // ✅
             <br className="hidden sm:block" /> wherever you are.
           </h3>
           <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300 mb-6">
-            Download <span className="font-semibold text-purple-600 dark:text-purple-400">MindCare</span> to start journaling today.
+            Download{" "}
+            <span className="font-semibold text-purple-600 dark:text-purple-400">
+              MindCare
+            </span>{" "}
+            to start journaling today.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center md:justify-start gap-4">
-            <a href="#" className="flex items-center gap-2 bg-black text-white px-5 py-3 rounded-xl shadow-md hover:opacity-90 transition">
-              <img src="/assets/apple.svg" alt="Apple" className="w-5 h-5" /> App Store
+            <a
+              href="#"
+              className="flex items-center gap-2 bg-black text-white px-5 py-3 rounded-xl shadow-md hover:opacity-90 transition"
+            >
+              <img src="/assets/apple.svg" alt="Apple" className="w-5 h-5" /> App
+              Store
             </a>
-            <a href="#" className="flex items-center gap-2 bg-black text-white px-5 py-3 rounded-xl shadow-md hover:opacity-90 transition">
-              <img src="/assets/google.svg" alt="Google Play" className="w-5 h-5" /> Google Play
+            <a
+              href="#"
+              className="flex items-center gap-2 bg-black text-white px-5 py-3 rounded-xl shadow-md hover:opacity-90 transition"
+            >
+              <img
+                src="/assets/google.svg"
+                alt="Google Play"
+                className="w-5 h-5"
+              />{" "}
+              Google Play
             </a>
-            <a href="#" className="flex items-center gap-2 bg-black text-white px-5 py-3 rounded-xl shadow-md hover:opacity-90 transition">🌐 Web App</a>
+            <a
+              href="#"
+              className="flex items-center gap-2 bg-black text-white px-5 py-3 rounded-xl shadow-md hover:opacity-90 transition"
+            >
+              🌐 Web App
+            </a>
           </div>
 
           <div className="mt-6 flex justify-center md:justify-start">
-            <img src="/assets/qrcode.png" alt="Download QR" className="w-32 h-32 rounded-xl shadow-md hover:scale-105 transition-transform duration-300" />
+            <img
+              src="/assets/qrcode.png"
+              alt="Download QR"
+              className="w-32 h-32 rounded-xl shadow-md hover:scale-105 transition-transform duration-300"
+            />
           </div>
         </div>
       </section>

@@ -52,7 +52,7 @@ export default function Insights() {
   const fetchPosts = async () => {
     setLoadingPosts(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/auth/community/posts`, {
+      const res = await axios.get(`${API_BASE_URL}/auth/community/posts`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (Array.isArray(res.data)) {
@@ -83,7 +83,7 @@ export default function Insights() {
     setPosting(true);
     try {
       const res = await axios.post(
-        `${API_BASE_URL}/api/auth/community/share`,
+        `${API_BASE_URL}/auth/community/share`,
         { text: content, mood: "neutral" },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -116,7 +116,7 @@ export default function Insights() {
         )
       );
       await axios.post(
-        `${API_BASE_URL}/api/auth/community/react`,
+        `${API_BASE_URL}/auth/community/react`,
         { postId, type },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -130,7 +130,7 @@ export default function Insights() {
     if (!editingText.trim()) return;
     try {
       const res = await axios.put(
-        `${API_BASE_URL}/api/auth/community/posts/${postId}`,
+        `${API_BASE_URL}/auth/community/posts/${postId}`,
         { text: editingText.trim() },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -149,7 +149,7 @@ export default function Insights() {
   const deletePost = async (postId) => {
     if (!confirm("Are you sure you want to delete this post?")) return;
     try {
-      await axios.delete(`${API_BASE_URL}/api/auth/community/posts/${postId}`, {
+      await axios.delete(`${API_BASE_URL}/auth/community/posts/${postId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setCommunityPosts((prev) => prev.filter((p) => p._id !== postId));
@@ -203,7 +203,7 @@ export default function Insights() {
       formData.append("audio", blob, "recording.webm");
 
       const res = await axios.post(
-        `${API_BASE_URL}/api/auth/voice-transcribe`,
+        `${API_BASE_URL}/auth/voice-transcribe`,
         formData,
         {
           headers: {
