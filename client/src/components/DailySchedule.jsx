@@ -46,7 +46,7 @@ export default function DailySchedule({ schedule, onRegenerate }) {
 
     try {
       await axios.post(
-        `${API_BASE_URL}/api/schedule/complete`,
+        `${API_BASE_URL}/schedule/complete`,
         { index, date: localSchedule.date },
         { headers: { Authorization: `Bearer ${token}` } }
       );

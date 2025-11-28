@@ -75,11 +75,12 @@ export default function DailyMoodPopup() {
         date: new Date().toISOString(),
       });
 
-      const res = await axios.post(
-        `${API_BASE_URL}/api/schedule`,
-        { mood },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+     const res = await axios.post(
+  `${API_BASE_URL}/schedule`,
+  { mood },
+  { headers: { Authorization: `Bearer ${token}` } }
+);
+
 
       setSchedulePopup(res.data);
       localStorage.setItem(`lastPopupDate_${user._id}`, new Date().toDateString());

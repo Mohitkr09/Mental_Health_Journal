@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import DailyMoodPopup from "../components/DailyMoodPopup.jsx";
 import DailySchedule from "../components/DailySchedule.jsx";
-import axios from "axios";
+import api from "../utils/api.js";   // 🔥 REQUIRED IMPORT
 
 import { useJournal } from "../context/JournalContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -71,15 +71,10 @@ export default function Home() {
     if (!user) return;
     setLoadingSchedule(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/schedule`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      // backend may return null
+const res = await api.get("/schedule"); // ✅
       setSchedule(res.data || null);
-      // generate recommendations from whatever schedule we have
-      setRecommendations(generateRecommendations(res.data?.mood || null, res.data));
+      setRecommendations(generateRecommendations(res.data?.mood, res.data));
     } catch (err) {
-      // no schedule yet is fine
       console.log("No schedule yet", err?.response?.data || "");
     } finally {
       setLoadingSchedule(false);
@@ -88,14 +83,12 @@ export default function Home() {
 
   useEffect(() => {
     fetchSchedule();
-    // cleanup on unmount
-    return () => {
-      if (notificationIntervalRef.current) clearInterval(notificationIntervalRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => notificationIntervalRef.current && clearInterval(notificationIntervalRef.current);
   }, [user]);
 
-  // Generate schedule from backend
+  /** =========================================================
+   * GENERATE NEW SCHEDULE
+   * ========================================================= */
   const generateSchedule = async (mood) => {
     if (!user) {
       alert("Please log in to generate schedule");
@@ -103,39 +96,33 @@ export default function Home() {
     }
     try {
       setLoadingSchedule(true);
-      const res = await axios.post(
-        `${API_BASE_URL}/api/schedule`,
-        { mood },
-        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-      );
+      const res = await api.post("/schedule", { mood }); // ✅ FIXED
       setSchedule(res.data);
       setRecommendations(generateRecommendations(mood, res.data));
-      // show an in-app notification that schedule created
       showInAppNotification(`Today's schedule created for "${mood}"`);
     } catch (err) {
       console.error("Failed to generate schedule:", err);
-      alert("Unable to generate schedule. See console.");
+      alert("Unable to generate schedule. Check console.");
     } finally {
       setLoadingSchedule(false);
     }
   };
 
-  // Called from DailyMoodPopup automatically
+  /** Called from DailyMoodPopup */
   const handleMoodSelected = async (mood) => {
-    // Save quick journal entry and then generate schedule
     try {
       await addEntry({
         text: `Daily quick log: Feeling ${mood} today.`,
         mood,
         date: new Date().toISOString(),
       });
-    } catch (e) {
-      console.warn("Could not save quick entry:", e);
-    }
+    } catch {}
     generateSchedule(mood);
   };
 
-  // ===== Notifications =====
+  /** =========================================================
+   * Notifications
+   * ========================================================= */
   const requestNotificationPermission = async () => {
     if (!("Notification" in window)) return false;
     if (Notification.permission === "granted") return true;
@@ -148,81 +135,53 @@ export default function Home() {
 
   const showBrowserNotification = async (title, body) => {
     if (!("Notification" in window)) return;
-    if (Notification.permission === "granted") {
-      try {
-        new Notification(title, { body });
-      } catch (e) {
-        console.warn("Notification error:", e);
-      }
-    } else {
-      // Try to request permission and then show if granted
-      const ok = await requestNotificationPermission();
-      if (ok) new Notification(title, { body });
-    }
+    if (Notification.permission === "granted") new Notification(title, { body });
+    else if (await requestNotificationPermission())
+      new Notification(title, { body });
   };
 
   const showInAppNotification = (text) => {
     setShowNotificationPopup(true);
-    // auto-hide
     setTimeout(() => setShowNotificationPopup(false), 4500);
   };
 
-  // Toggle notifications (persisted)
   const toggleNotifications = async () => {
     const newVal = !notificationsEnabled;
     setNotificationsEnabled(newVal);
-    localStorage.setItem("notificationsEnabled", newVal ? "true" : "false");
+    localStorage.setItem("notificationsEnabled", newVal);
 
     if (newVal) {
-      // ask permission
       await requestNotificationPermission();
-      // start interval to show random tip every 3 hours (demo: 60s)
       if (notificationIntervalRef.current) clearInterval(notificationIntervalRef.current);
-      // for demo, use 60*60*1000 (1 hour). Lower for dev testing
       notificationIntervalRef.current = setInterval(() => {
         const tip = wellnessTips[Math.floor(Math.random() * wellnessTips.length)];
         showBrowserNotification("MindCare Reminder", tip);
         showInAppNotification(tip);
-      }, 60 * 60 * 1000); // production: every hour
-      // fire one immediately
-      const tip = wellnessTips[Math.floor(Math.random() * wellnessTips.length)];
-      showBrowserNotification("MindCare Reminder", tip);
-      showInAppNotification(tip);
+      }, 60 * 60 * 1000);
     } else {
-      if (notificationIntervalRef.current) {
-        clearInterval(notificationIntervalRef.current);
-        notificationIntervalRef.current = null;
-      }
+      clearInterval(notificationIntervalRef.current);
+      notificationIntervalRef.current = null;
     }
   };
 
-  // ===== Timeline helpers =====
+  /** =========================================================
+   * UI Helpers
+   * ========================================================= */
   const getTimelineItems = (scheduleObj) => {
-    const items = scheduleObj?.items || scheduleObj?.tasks || [];
-    // Normalize: if backend uses {time, title, description} convert to {time, title, description}
-    const normalized = items.map((it, idx) => {
-      // Some backends might use {title, time, description} or {task, time}
-      return {
-        id: it._id || it.id || `${it.time || "t"}-${idx}`,
-        time: it.time || it.start || "",
-        title: it.title || it.task || it.name || "Untitled",
-        description: it.description || it.desc || "",
-        durationMins: it.durationMins || null,
-        type: it.type || "general",
-      };
-    });
-    // sort by time if time exists (HH:MM)
-    normalized.sort((a, b) => {
-      if (!a.time) return 1;
-      if (!b.time) return -1;
-      return a.time.localeCompare(b.time);
-    });
-    return normalized;
+    const items = scheduleObj?.items || [];
+    return items
+      .map((it, idx) => ({
+        id: it._id || `${it.time}-${idx}`,
+        time: it.time,
+        title: it.title,
+        description: it.description,
+        type: it.type,
+      }))
+      .sort((a, b) => a.time.localeCompare(b.time));
   };
 
   const timelineItems = useMemo(() => getTimelineItems(schedule), [schedule]);
 
-  // Mark task complete (local)
   const toggleComplete = (task) => {
     const key = `${task.time}_${task.title}`;
     setCompletedMap((prev) => ({ ...prev, [key]: !prev[key] }));

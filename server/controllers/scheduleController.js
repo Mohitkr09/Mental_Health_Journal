@@ -47,7 +47,6 @@ const generateSchedule = (mood) => {
   }
 };
 
-// Create or update schedule
 export const createOrUpdateSchedule = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -59,7 +58,10 @@ export const createOrUpdateSchedule = async (req, res) => {
 
     const schedule = await Schedule.findOneAndUpdate(
       { user: userId, date },
-      { mood, items, $setOnInsert: { completed: [] } },
+      {
+        $set: { mood, items },
+        $setOnInsert: { completed: [], sleepTip: "Aim for 7–9 hours", stressScore: 2 }
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
@@ -69,6 +71,7 @@ export const createOrUpdateSchedule = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 // Get schedule
 export const getSchedule = async (req, res) => {
