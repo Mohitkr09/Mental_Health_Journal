@@ -4,7 +4,6 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import helmet from "helmet";
 import morgan from "morgan";
-import path from "path";
 
 // Import routes
 import journalRoutes from "./routes/journalRoutes.js";
@@ -14,29 +13,30 @@ import userRoutes from "./routes/userRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import scheduleRoutes from "./routes/scheduleRoutes.js";
 
-// Reminder Service
+// Services
 import startReminderService from "./services/reminderService.js";
 
 dotenv.config();
 const app = express();
 
 /* --------------------------------------------------
-   CORS CONFIG — FIXED FOR PROD + DEV
+   CORS CONFIG — CORRECT & PRODUCTION SAFE
 ---------------------------------------------------*/
+
 const allowedOrigins = [
-  process.env.CLIENT_URL,
-  "http://localhost:5173",
-  "https://mental-health-journal-1c2a.onrender.com",
+  process.env.CLIENT_URL,                                   // From ENV
+  "https://mental-health-journal-ml61.vercel.app",          // Your Vercel frontend
+  "http://localhost:5173"                                   // Local dev
 ].filter(Boolean);
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // allow mobile/postman
 
-      const cleanOrigin = origin.replace(/\/$/, ""); // remove trailing slash
+      const normalizedOrigin = origin.replace(/\/$/, ""); // remove trailing slash
       const isAllowed = allowedOrigins.some((o) =>
-        cleanOrigin.startsWith(o.replace(/\/$/, ""))
+        normalizedOrigin.startsWith(o.replace(/\/$/, ""))
       );
 
       if (isAllowed) return callback(null, true);
@@ -45,9 +45,10 @@ app.use(
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-
 
 /* --------------------------------------------------
    MIDDLEWARE
@@ -75,7 +76,7 @@ mongoose
   });
 
 /* --------------------------------------------------
-   API ROUTES
+   API ROUTES (Notice each route already includes /api)
 ---------------------------------------------------*/
 app.use("/api/journal", journalRoutes);
 app.use("/api/chat", chatRoutes);
@@ -91,7 +92,9 @@ app.get("/", (req, res) => {
   res.json({ status: "ok", message: "🚀 API is running" });
 });
 
-
+/* --------------------------------------------------
+   GLOBAL ERROR HANDLER
+---------------------------------------------------*/
 app.use((err, req, res, next) => {
   console.error("❌ Server error:", err.message || err);
   res.status(err.status || 500).json({
@@ -99,6 +102,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-
+/* --------------------------------------------------
+   SERVER INIT
+---------------------------------------------------*/
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`🚀 Server running on http://localhost:${PORT}`)
+);
