@@ -1,93 +1,99 @@
 // src/context/JournalContext.jsx
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "../utils/api.js";
 import { useAuth } from "./AuthContext.jsx";
 
 const JournalContext = createContext();
 
-export function JournalProvider({ children }) {
+// --------------------------
+// Custom Hook
+// --------------------------
+export const useJournal = () => {
+  return useContext(JournalContext);
+};
+
+// Keep entries for 30 DAYS
+const KEEP_MS = 30 * 24 * 60 * 60 * 1000; 
+
+// --------------------------
+// Provider Component
+// --------------------------
+export const JournalProvider = ({ children }) => {
   const { user } = useAuth();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
-
-  /** -------------------------------------------------------
-   * LOAD FROM LOCAL STORAGE FIRST
-   * ------------------------------------------------------ */
+  /* ------------------------------------------
+   * Load initial cache on mount
+   -------------------------------------------*/
   useEffect(() => {
-    const cached = localStorage.getItem("journalEntries");
-    if (cached) {
-      setEntries(JSON.parse(cached));
+    try {
+      const cached = localStorage.getItem("journalEntries");
+      if (cached) setEntries(JSON.parse(cached));
+    } catch {
+      localStorage.removeItem("journalEntries");
     }
   }, []);
 
-  /** -------------------------------------------------------
-   * SAVE TO LOCAL STORAGE ON EVERY CHANGE
-   * ------------------------------------------------------ */
+  /* ------------------------------------------
+   * Persist every change to LocalStorage
+   -------------------------------------------*/
   useEffect(() => {
     localStorage.setItem("journalEntries", JSON.stringify(entries));
   }, [entries]);
 
-  /** -------------------------------------------------------
-   * FETCH FROM BACKEND + MERGE, NOT OVERWRITE
-   * ------------------------------------------------------ */
-  const fetchEntries = async () => {
+  /* ------------------------------------------
+   * Fetch entries from backend & merge
+   -------------------------------------------*/
+  const fetchEntries = useCallback(async () => {
     const token = localStorage.getItem("token");
-
     if (!user || !token) return;
 
     setLoading(true);
+    setError(null);
+
     try {
       const res = await api.get("/journal", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const backendList = Array.isArray(res.data) ? res.data : [];
+      const list = Array.isArray(res.data) ? res.data : [];
 
-      // Filter backend 30 days
       const now = Date.now();
-      const backendRecent = backendList.filter(
+      const backendRecent = list.filter(
         (item) => now - new Date(item.createdAt).getTime() <= KEEP_MS
       );
 
-      // Load local cache
-      const localList = JSON.parse(localStorage.getItem("journalEntries") || "[]");
-
-      // MERGE:
+      // Merge backend + local cache without duplicates
+      const local = JSON.parse(localStorage.getItem("journalEntries") || "[]");
       const merged = [
         ...backendRecent,
-        ...localList.filter(
-          (loc) => !backendRecent.some((srv) => srv._id === loc._id)
-        ),
+        ...local.filter((loc) => !backendRecent.some((srv) => srv._id === loc._id)),
       ];
 
       setEntries(merged);
       localStorage.setItem("journalEntries", JSON.stringify(merged));
     } catch (err) {
-      console.error("Fetch journals error:", err);
+      console.error("⚠️ Journal fetch failed:", err);
+      setError("Failed to load journal entries");
 
-      // fallback to local cache
+      // fallback to cache
       const cached = localStorage.getItem("journalEntries");
       if (cached) setEntries(JSON.parse(cached));
-
-      setError("Failed to load journal entries");
     } finally {
       setLoading(false);
     }
-  };
-
-  /** -------------------------------------------------------
-   * FETCH ONLY WHEN USER IS AVAILABLE
-   * ------------------------------------------------------ */
-  useEffect(() => {
-    if (user) fetchEntries();
   }, [user]);
 
-  /** -------------------------------------------------------
-   * ADD ENTRY (also saves locally)
-   * ------------------------------------------------------ */
+  // Fetch only when logged in user changes
+  useEffect(() => {
+    if (user) fetchEntries();
+  }, [user, fetchEntries]);
+
+  /* ------------------------------------------
+   * Add new entry
+   -------------------------------------------*/
   const addEntry = async (entryData) => {
     const token = localStorage.getItem("token");
     if (!token) throw new Error("Not authenticated");
@@ -97,11 +103,9 @@ export function JournalProvider({ children }) {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const savedEntry = res.data?.journal || res.data;
+      const saved = res.data?.journal || res.data;
 
-      const updated = [savedEntry, ...entries];
-
-      // Keep only last 30 days
+      const updated = [saved, ...entries];
       const now = Date.now();
       const pruned = updated.filter(
         (it) => now - new Date(it.createdAt).getTime() <= KEEP_MS
@@ -109,10 +113,9 @@ export function JournalProvider({ children }) {
 
       setEntries(pruned);
       localStorage.setItem("journalEntries", JSON.stringify(pruned));
-
-      return savedEntry;
+      return saved;
     } catch (err) {
-      console.error("Add entry error:", err);
+      console.error("Add entry failed:", err);
       throw err;
     }
   };
@@ -121,16 +124,14 @@ export function JournalProvider({ children }) {
     <JournalContext.Provider
       value={{
         entries,
-        setEntries,
-        addEntry,
-        fetchEntries,
         loading,
         error,
+        fetchEntries,
+        addEntry,
+        setEntries,
       }}
     >
       {children}
     </JournalContext.Provider>
   );
-}
-
-export const useJournal = () => useContext(JournalContext);
+};

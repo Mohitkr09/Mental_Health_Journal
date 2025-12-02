@@ -1,9 +1,15 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
+const API_URL =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
+  "https://mental-health-journal-1c2a.onrender.com/api";
 
 const api = axios.create({
-  baseURL: API_URL, // do NOT add /api again here
+  baseURL: API_URL, 
+  withCredentials: true,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
 api.interceptors.request.use((config) => {
