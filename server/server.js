@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 import helmet from "helmet";
 import morgan from "morgan";
 
-// Import routes
+// Routes
 import journalRoutes from "./routes/journalRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
@@ -20,26 +20,32 @@ dotenv.config();
 const app = express();
 
 /* --------------------------------------------------
-   CORS CONFIG — CORRECT & PRODUCTION SAFE
+   CORS CONFIG — allow localhost + any *.vercel.app
 ---------------------------------------------------*/
 
-const allowedOrigins = [
-  process.env.CLIENT_URL,                                   // From ENV
-  "https://mental-health-journal-ml61.vercel.app",          // Your Vercel frontend
-  "http://localhost:5173"                                   // Local dev
+const baseAllowed = [
+  process.env.CLIENT_URL,      // your main frontend
+  "http://localhost:5173",     // local dev
 ].filter(Boolean);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // Postman, curl, etc.
+
+  const clean = origin.replace(/\/$/, "");
+
+  const isLocal = clean.startsWith("http://localhost");
+  const isVercel = clean.endsWith(".vercel.app");
+  const isExplicit = baseAllowed.some((o) =>
+    clean.startsWith(o.replace(/\/$/, ""))
+  );
+
+  return isLocal || isVercel || isExplicit;
+}
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) return callback(null, true); // allow mobile/postman
-
-      const normalizedOrigin = origin.replace(/\/$/, ""); // remove trailing slash
-      const isAllowed = allowedOrigins.some((o) =>
-        normalizedOrigin.startsWith(o.replace(/\/$/, ""))
-      );
-
-      if (isAllowed) return callback(null, true);
+      if (isAllowedOrigin(origin)) return callback(null, true);
 
       console.warn(`🚫 CORS BLOCKED: ${origin}`);
       return callback(new Error("Not allowed by CORS"));
@@ -59,7 +65,7 @@ app.use(helmet());
 app.use(morgan("dev"));
 
 /* --------------------------------------------------
-   DATABASE CONNECTION
+   DATABASE
 ---------------------------------------------------*/
 mongoose
   .connect(process.env.MONGO_URI, {
@@ -76,7 +82,7 @@ mongoose
   });
 
 /* --------------------------------------------------
-   API ROUTES (Notice each route already includes /api)
+   ROUTES
 ---------------------------------------------------*/
 app.use("/api/journal", journalRoutes);
 app.use("/api/chat", chatRoutes);
@@ -93,7 +99,7 @@ app.get("/", (req, res) => {
 });
 
 /* --------------------------------------------------
-   GLOBAL ERROR HANDLER
+   ERROR HANDLER
 ---------------------------------------------------*/
 app.use((err, req, res, next) => {
   console.error("❌ Server error:", err.message || err);
@@ -103,7 +109,7 @@ app.use((err, req, res, next) => {
 });
 
 /* --------------------------------------------------
-   SERVER INIT
+   SERVER
 ---------------------------------------------------*/
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>
