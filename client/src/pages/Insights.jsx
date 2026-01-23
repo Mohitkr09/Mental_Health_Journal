@@ -317,6 +317,18 @@ export default function Insights() {
                 key={post._id}
                 className="p-4 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm"
               >
+                <img
+  src={
+    post.user?.avatar?.startsWith("http")
+      ? post.user.avatar
+      : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          post.user?.name || "User"
+        )}&background=6D28D9&color=fff`
+  }
+  alt="profile"
+  className="w-12 h-12 rounded-full object-cover border"
+/>
+
                 {editingPostId === post._id ? (
                   <div className="flex flex-col sm:flex-row gap-2">
                     <input

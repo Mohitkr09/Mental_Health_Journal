@@ -154,11 +154,19 @@ export const updateUserProfile = async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     user.name = req.body.name || user.name;
-    user.avatar = req.body.avatar || user.avatar;
     user.theme = req.body.theme || user.theme;
-    if (req.body.password) user.password = req.body.password;
+
+    // ✅ CLOUDINARY IMAGE URL
+    if (req.file?.path) {
+      user.avatar = req.file.path;
+    }
+
+    if (req.body.password) {
+      user.password = req.body.password;
+    }
 
     const updatedUser = await user.save();
+
     res.json({
       _id: updatedUser._id,
       name: updatedUser.name,
@@ -169,9 +177,10 @@ export const updateUserProfile = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Update profile error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: "Server error" });
   }
 };
+
 
 // ---------------- TOGGLE THEME ----------------
 export const toggleTheme = async (req, res) => {
@@ -236,26 +245,36 @@ const filterSensitiveData = (text) => {
 export const shareCommunityPost = async (req, res) => {
   try {
     const { text, mood } = req.body;
-    if (!text) return res.status(400).json({ message: "Text is required" });
+    if (!text) {
+      return res.status(400).json({ message: "Text is required" });
+    }
 
     const post = await CommunityPost.create({
+      user: req.user._id, // ✅ ADD USER
       text: filterSensitiveData(text),
       mood: mood || "neutral",
-      date: new Date(),
       likes: { support: 0, relate: 0 },
       anonymous_id: uuidv4(),
     });
 
-    res.status(201).json(post);
+    // ✅ Populate user before sending response
+    const populatedPost = await post.populate("user", "name avatar");
+
+    res.status(201).json(populatedPost);
   } catch (error) {
     console.error("❌ Share post error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
+
 export const getCommunityPosts = async (req, res) => {
   try {
-    const posts = await CommunityPost.find({}).sort({ date: -1 }).limit(50);
+    const posts = await CommunityPost.find({})
+      .populate("user", "name avatar") // ✅ IMPORTANT
+      .sort({ createdAt: -1 })
+      .limit(50);
+
     res.json(posts);
   } catch (error) {
     console.error("❌ Get posts error:", error);
@@ -312,83 +331,75 @@ export const deleteCommunityPost = async (req, res) => {
 
 export const voiceTranscribe = async (req, res) => {
   try {
+    // 1️⃣ Validate file
     if (!req.file) {
-      console.error("❌ No audio file received.");
+      console.error("❌ No audio file received");
       return res.status(400).json({ error: "No audio file uploaded" });
     }
 
-    console.log("🎤 Received file:", {
-      fieldname: req.file.fieldname,
+    console.log("🎤 Audio received:", {
       mimetype: req.file.mimetype,
       size: req.file.size,
     });
 
-    // FFmpeg path
-    const ffmpegPath =
-      "C:\\Users\\hp\\Downloads\\ffmpeg-8.0-essentials_build\\ffmpeg-8.0-essentials_build\\bin\\ffmpeg.exe";
+    // 2️⃣ Temp paths (Render-safe)
+    const tempDir = os.tmpdir();
+    const tempWebm = path.join(tempDir, `audio-${Date.now()}.webm`);
+    const tempWav = path.join(tempDir, `audio-${Date.now()}.wav`);
 
-    const tempWebm = path.join(os.tmpdir(), `audio-${Date.now()}.webm`);
-    const tempWav = path.join(os.tmpdir(), `audio-${Date.now()}.wav`);
-
-    // Write uploaded file to temp folder
-    if (req.file.path) {
+    // 3️⃣ Write audio file
+    if (req.file.buffer) {
+      fs.writeFileSync(tempWebm, req.file.buffer);
+    } else if (req.file.path) {
       fs.copyFileSync(req.file.path, tempWebm);
     } else {
-      fs.writeFileSync(tempWebm, req.file.buffer);
+      return res.status(400).json({ error: "Invalid audio upload" });
     }
 
-    // Convert webm → wav
+    // 4️⃣ Convert audio using system FFmpeg
     try {
       execSync(
-        `"${ffmpegPath}" -y -i "${tempWebm}" -ar 16000 -ac 1 -c:a pcm_s16le "${tempWav}"`,
-        { stdio: "ignore" }
+        `ffmpeg -y -i "${tempWebm}" -ar 16000 -ac 1 -c:a pcm_s16le "${tempWav}"`,
+        { stdio: "inherit" }
       );
       console.log("✅ FFmpeg conversion success");
-
-      // Debug WAV file
-      console.log(
-        "WAV exists:",
-        fs.existsSync(tempWav),
-        "Size:",
-        fs.statSync(tempWav).size
-      );
-
-      const debugWavPath = path.join(process.cwd(), "debug_audio.wav");
-      fs.copyFileSync(tempWav, debugWavPath);
-      console.log("DEBUG WAV SAVED:", debugWavPath);
-
     } catch (err) {
-      console.error("❌ FFmpeg conversion failed:", err);
-      return res.status(500).json({ error: "FFmpeg conversion failed" });
+      console.error("❌ FFmpeg failed:", err.message);
+      return res.status(500).json({ error: "Audio conversion failed" });
     }
 
-    // Correct Python script path
-    const pythonScript = path.join(process.cwd(), "python/transcribe.py");
+    // 5️⃣ Python transcription
+    const pythonScript = path.join(process.cwd(), "python", "transcribe.py");
 
-    console.log("🐍 Python script path being executed:", pythonScript);
+    console.log("🐍 Running Python:", pythonScript);
 
-    const result = spawnSync("python", [pythonScript, tempWav], {
+    const result = spawnSync("python3", [pythonScript, tempWav], {
       encoding: "utf-8",
     });
 
-    console.log("🐍 PYTHON STDOUT:", result.stdout);
-    console.error("🐍 PYTHON STDERR:", result.stderr);
+    console.log("🐍 STDOUT:", result.stdout);
+    console.error("🐍 STDERR:", result.stderr);
 
+    // 6️⃣ Handle Python failure
+    if (result.status !== 0) {
+      return res.status(500).json({
+        error: "Transcription failed",
+        details: result.stderr || "Python script error",
+      });
+    }
+
+    // 7️⃣ Cleanup
     fs.unlinkSync(tempWebm);
     fs.unlinkSync(tempWav);
 
-    if (result.error) {
-      console.error("❌ Python error:", result.error);
-      return res.status(500).json({ error: "Transcription failed" });
-    }
-
-    const outputText = result.stdout.trim();
-    res.json({ text: outputText || "No speech detected" });
+    // 8️⃣ Return text
+    const text = result.stdout.trim();
+    res.json({ text: text || "No speech detected" });
 
   } catch (error) {
-    console.error("🔥 Transcription error:", error);
+    console.error("🔥 Voice Transcription Crash:", error);
     res.status(500).json({
-      error: "Transcription failed",
+      error: "Voice transcription failed",
       details: error.message,
     });
   }
