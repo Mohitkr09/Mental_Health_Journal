@@ -5,17 +5,14 @@ import os from "os";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import { execSync, spawnSync } from "child_process";
-import ffmpeg from "fluent-ffmpeg";
+import ffmpegPath from "ffmpeg-static";
 
 import User from "../models/user.js";
 import MindMap from "../models/mindMap.js";
 import CommunityPost from "../models/CommunityPost.js";
 import transporter from "../utils/email.js";
 
-// ✅ Set FFmpeg path for your system
-ffmpeg.setFfmpegPath(
-  "C:\\Users\\hp\\Downloads\\ffmpeg-8.0-essentials_build\\ffmpeg-8.0-essentials_build\\bin\\ffmpeg.exe"
-);
+
 
 // ---------------- JWT ----------------
 const generateToken = (id) =>
@@ -359,9 +356,10 @@ export const voiceTranscribe = async (req, res) => {
     // 4️⃣ Convert audio using system FFmpeg
     try {
       execSync(
-        `ffmpeg -y -i "${tempWebm}" -ar 16000 -ac 1 -c:a pcm_s16le "${tempWav}"`,
-        { stdio: "inherit" }
-      );
+  `"${ffmpegPath}" -y -i "${tempWebm}" -ar 16000 -ac 1 -c:a pcm_s16le "${tempWav}"`,
+  { stdio: "inherit" }
+);
+
       console.log("✅ FFmpeg conversion success");
     } catch (err) {
       console.error("❌ FFmpeg failed:", err.message);
