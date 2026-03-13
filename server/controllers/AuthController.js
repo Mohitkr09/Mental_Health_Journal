@@ -327,24 +327,27 @@ export const deleteCommunityPost = async (req, res) => {
 };
 
 export const voiceTranscribe = async (req, res) => {
+  let tempWebm = null;
+  let tempWav = null;
+
   try {
-    // 1️⃣ Validate file
+    // 1️⃣ Validate audio file
     if (!req.file) {
-      console.error("❌ No audio file received");
+      console.error("❌ No audio file uploaded");
       return res.status(400).json({ error: "No audio file uploaded" });
     }
 
     console.log("🎤 Audio received:", {
       mimetype: req.file.mimetype,
-      size: req.file.size,
+      size: req.file.size
     });
 
-    // 2️⃣ Temp paths (Render-safe)
+    // 2️⃣ Create temporary file paths (Render safe)
     const tempDir = os.tmpdir();
-    const tempWebm = path.join(tempDir, `audio-${Date.now()}.webm`);
-    const tempWav = path.join(tempDir, `audio-${Date.now()}.wav`);
+    tempWebm = path.join(tempDir, `audio-${Date.now()}.webm`);
+    tempWav = path.join(tempDir, `audio-${Date.now()}.wav`);
 
-    // 3️⃣ Write audio file
+    // 3️⃣ Save uploaded audio
     if (req.file.buffer) {
       fs.writeFileSync(tempWebm, req.file.buffer);
     } else if (req.file.path) {
@@ -353,53 +356,82 @@ export const voiceTranscribe = async (req, res) => {
       return res.status(400).json({ error: "Invalid audio upload" });
     }
 
-    // 4️⃣ Convert audio using system FFmpeg
+    console.log("📁 Temp audio saved:", tempWebm);
+
+    // 4️⃣ Convert to WAV using FFmpeg
     try {
       execSync(
-  `"${ffmpegPath}" -y -i "${tempWebm}" -ar 16000 -ac 1 -c:a pcm_s16le "${tempWav}"`,
-  { stdio: "inherit" }
-);
+        `"${ffmpegPath}" -y -i "${tempWebm}" -ar 16000 -ac 1 -c:a pcm_s16le "${tempWav}"`,
+        { stdio: "inherit" }
+      );
 
-      console.log("✅ FFmpeg conversion success");
-    } catch (err) {
-      console.error("❌ FFmpeg failed:", err.message);
-      return res.status(500).json({ error: "Audio conversion failed" });
+      console.log("✅ FFmpeg conversion successful");
+    } catch (ffmpegError) {
+      console.error("❌ FFmpeg conversion failed:", ffmpegError.message);
+      return res.status(500).json({
+        error: "Audio conversion failed",
+        details: ffmpegError.message
+      });
     }
 
-    // 5️⃣ Python transcription
-    const pythonScript = path.join(process.cwd(), "python", "transcribe.py");
+    // 5️⃣ Python script path (FIXED)
+    const pythonScript = path.join(process.cwd(), "server", "python", "transcribe.py");
 
-    console.log("🐍 Running Python:", pythonScript);
+    if (!fs.existsSync(pythonScript)) {
+      console.error("❌ Python script not found:", pythonScript);
+      return res.status(500).json({
+        error: "Transcription script missing"
+      });
+    }
 
-    const result = spawnSync("python3", [pythonScript, tempWav], {
-      encoding: "utf-8",
+    console.log("🐍 Running Python script:", pythonScript);
+
+    // 6️⃣ Run Python transcription
+    const result = spawnSync("python", [pythonScript, tempWav], {
+      encoding: "utf-8"
     });
 
     console.log("🐍 STDOUT:", result.stdout);
     console.error("🐍 STDERR:", result.stderr);
 
-    // 6️⃣ Handle Python failure
-    if (result.status !== 0) {
+    if (result.error) {
+      console.error("❌ Python execution error:", result.error);
       return res.status(500).json({
-        error: "Transcription failed",
-        details: result.stderr || "Python script error",
+        error: "Python execution failed",
+        details: result.error.message
       });
     }
 
-    // 7️⃣ Cleanup
-    fs.unlinkSync(tempWebm);
-    fs.unlinkSync(tempWav);
+    if (result.status !== 0) {
+      return res.status(500).json({
+        error: "Transcription failed",
+        details: result.stderr || "Unknown Python error"
+      });
+    }
 
-    // 8️⃣ Return text
+    // 7️⃣ Return transcription
     const text = result.stdout.trim();
-    res.json({ text: text || "No speech detected" });
+
+    res.json({
+      text: text || "No speech detected"
+    });
 
   } catch (error) {
-    console.error("🔥 Voice Transcription Crash:", error);
+    console.error("🔥 Voice transcription crash:", error);
+
     res.status(500).json({
       error: "Voice transcription failed",
-      details: error.message,
+      details: error.message
     });
+
+  } finally {
+    // 8️⃣ Always clean temp files
+    try {
+      if (tempWebm && fs.existsSync(tempWebm)) fs.unlinkSync(tempWebm);
+      if (tempWav && fs.existsSync(tempWav)) fs.unlinkSync(tempWav);
+    } catch (cleanupError) {
+      console.warn("⚠️ Temp file cleanup failed:", cleanupError.message);
+    }
   }
 };
 
