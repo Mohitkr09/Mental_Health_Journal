@@ -1,437 +1,532 @@
-// src/pages/Journal.jsx
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import api from "../utils/api.js";
 import { useTheme } from "../context/ThemeContext.jsx";
 
+import CalendarHeatmap from "react-calendar-heatmap";
+import "react-calendar-heatmap/dist/styles.css";
+import { subDays } from "date-fns";
+
+import SpeechRecognition, {
+  useSpeechRecognition
+} from "react-speech-recognition";
+
 export default function Journal() {
-  const { theme } = useTheme();
-  const navigate = useNavigate();
 
-  const [text, setText] = useState("");
-  const [mood, setMood] = useState("");
-  const [journals, setJournals] = useState([]);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+const { theme } = useTheme()
 
-  const [search, setSearch] = useState("");
-  const [filterMood, setFilterMood] = useState("");
+const [text,setText]=useState("")
+const [mood,setMood]=useState("")
+const [journals,setJournals]=useState([])
+const [loading,setLoading]=useState(false)
 
-  const chartRef = useRef(null);
-  const chartInstanceRef = useRef(null);
+const [search,setSearch]=useState("")
+const [filterMood,setFilterMood]=useState("")
 
-  // Prevent saving to localStorage until we've hydrated from it
-  const hydratedRef = useRef(false);
+const chartRef=useRef(null)
+const chartInstanceRef=useRef(null)
 
-  const KEEP_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const KEEP_MS=30*24*60*60*1000
 
-  const moodToValue = (m) =>
-    m === "happy" ? 4 : m === "neutral" ? 3 : m === "anxious" ? 2 : m === "sad" ? 1 : 0;
 
-  const moodColors = {
-    happy: "#4ade80",
-    neutral: "#9CA3AF",
-    anxious: "#FB923C",
-    sad: "#60A5FA",
-    angry: "#EF4444",
-    tired: "#A78BFA",
-  };
+/* ==============================
+VOICE JOURNAL
+============================== */
 
-  // -------------------------
-  // DEBUG: log storage & state (optional, remove later)
-  useEffect(() => {
-    console.log("🟡 localStorage(journals):", localStorage.getItem("journals"));
-    console.log("🟣 React State(journals):", journals);
-  }, [journals]);
+const { transcript,listening,resetTranscript } =
+useSpeechRecognition()
 
-  // ---------------------------------------------------------
-  // 1) Hydrate from localStorage ONCE (fast UI)
-  useEffect(() => {
-    try {
-      const cached = localStorage.getItem("journals");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        setJournals(parsed);
-        console.log("📥 Hydrated journals from localStorage:", parsed.length);
-      } else {
-        console.log("❗ No journals in localStorage");
-      }
-    } catch (err) {
-      console.warn("⚠️ Failed to parse cached journals:", err);
-    } finally {
-      // mark hydrated so subsequent changes persist to storage
-      hydratedRef.current = true;
-    }
-  }, []);
+useEffect(()=>{
+if(transcript) setText(transcript)
+},[transcript])
 
-  // ---------------------------------------------------------
-  // 2) Persist to localStorage — but ONLY after hydration
-  useEffect(() => {
-    if (!hydratedRef.current) {
-      // skip initial writes before we loaded cached data
-      return;
-    }
-    try {
-      localStorage.setItem("journals", JSON.stringify(journals));
-      // small debug:
-      // console.log("💾 Saved journals to localStorage:", journals.length);
-    } catch (err) {
-      console.error("❌ Failed to save journals to localStorage:", err);
-    }
-  }, [journals]);
 
-  // ---------------------------------------------------------
-  // 3) Fetch backend and MERGE with current state safely
-  useEffect(() => {
-    const fetchAndMerge = async () => {
-      const token = localStorage.getItem("token");
-      if (!token || token === "null") {
-        // do not navigate aggressively if you want offline-first behavior.
-        // For now, we return early to avoid redirect races.
-        console.log("❌ No token found — skipping backend fetch");
-        return;
-      }
+/* ==============================
+AI MOOD DETECTION
+============================== */
 
-      try {
-        const res = await api.get("/journal");
-        const backendList = Array.isArray(res.data)
-          ? res.data
-          : res.data?.journals ?? res.data?.data ?? res.data?.items ?? [];
+const detectEmotion=(text)=>{
 
-        console.log("🌐 Backend returned", backendList.length, "entries");
+const t=text.toLowerCase()
 
-        const now = Date.now();
-        const backendRecent = backendList.filter(
-          (it) => now - new Date(it.createdAt).getTime() <= KEEP_MS
-        );
+if(t.includes("happy")||t.includes("great")) return "happy"
+if(t.includes("stress")||t.includes("worried")) return "anxious"
+if(t.includes("sad")) return "sad"
+if(t.includes("tired")) return "tired"
 
-        // Use current React state as local set (avoid re-reading localStorage which might be overwritten elsewhere)
-        const localCurrent = journals || [];
+return "neutral"
 
-        // Merge backendRecent (prefer server entries) with local entries not present on server
-        const merged = [
-          // Keep server entries first (dedup by _id)
-          ...backendRecent,
-          // Append local entries that server doesn't have
-          ...localCurrent.filter((loc) => !backendRecent.some((b) => b._id === loc._id)),
-        ];
+}
 
-        // If merged is empty but we have localCurrent, keep localCurrent (prevents server-empty wiping)
-        const final = merged.length > 0 ? merged : localCurrent;
 
-        setJournals(final);
+/* ==============================
+FETCH JOURNALS
+============================== */
 
-        // Ensure persisted storage (we guard save by hydratedRef so it's safe)
-        if (hydratedRef.current) {
-          try {
-            localStorage.setItem("journals", JSON.stringify(final));
-          } catch (err) {
-            /* ignore */
-          }
-        }
-      } catch (err) {
-        console.warn("⚠️ Failed to fetch backend journals — keeping local cache", err);
-        // keep local journals (no-op)
-      }
-    };
+useEffect(()=>{
 
-    // Run fetch after a small microtask to let initial hydration settle
-    // (helps avoid edge timing issues)
-    const t = setTimeout(fetchAndMerge, 50);
-    return () => clearTimeout(t);
-  }, [/* intentionally no dependency on journals to avoid loop */, navigate]);
+const fetchJournals=async()=>{
 
-  // ---------------------------------------------------------
-  // Prepare chart data (last 30 days, oldest->newest)
-  const chartData = journals
-    .slice()
-    .filter((e) => Date.now() - new Date(e.createdAt).getTime() <= KEEP_MS)
-    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-    .map((entry) => ({
-      date: new Date(entry.createdAt).toLocaleDateString(),
-      mood: entry.mood || "neutral",
-      value: moodToValue(entry.mood),
-    }));
+try{
 
-  // ---------------------------------------------------------
-  // Build Chart.js graph
-  useEffect(() => {
-    if (!chartRef.current) return;
+const res=await api.get("/journal")
+const list=res.data?.journals||res.data||[]
 
-    if (chartInstanceRef.current) {
-      try {
-        chartInstanceRef.current.destroy();
-      } catch (e) {
-        /* ignore */
-      }
-      chartInstanceRef.current = null;
-    }
+setJournals(list)
 
-    if (!chartData || chartData.length < 2) return;
+}catch{
+console.log("offline")
+}
 
-    let isMounted = true;
-    (async () => {
-      try {
-        const ChartModule = await import("chart.js/auto");
-        const Chart = ChartModule.default ?? ChartModule.Chart ?? ChartModule;
-        if (!isMounted) return;
+}
 
-        const ctx = chartRef.current.getContext("2d");
-        const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-        gradient.addColorStop(0, "rgba(139,92,246,0.15)");
-        gradient.addColorStop(1, "rgba(139,92,246,0.02)");
+fetchJournals()
 
-        chartInstanceRef.current = new Chart(ctx, {
-          type: "line",
-          data: {
-            labels: chartData.map((d) => d.date),
-            datasets: [
-              {
-                label: "Mood",
-                data: chartData.map((d) => d.value),
-                fill: true,
-                backgroundColor: gradient,
-                borderWidth: 3,
-                borderColor: "#8b5cf6",
-                pointBackgroundColor: chartData.map((d) => moodColors[d.mood] || "#8b5cf6"),
-                pointRadius: 6,
-                pointHoverRadius: 8,
-                tension: 0.35,
-                segment: {
-                  borderColor: (ctx) => {
-                    const i = ctx.p0DataIndex;
-                    return moodColors[chartData[i]?.mood] || "#8b5cf6";
-                  },
-                },
-              },
-            ],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-              y: {
-                min: 0,
-                max: 4,
-                ticks: {
-                  stepSize: 1,
-                  callback: (v) =>
-                    v === 4
-                      ? "Happy"
-                      : v === 3
-                      ? "Neutral"
-                      : v === 2
-                      ? "Anxious"
-                      : v === 1
-                      ? "Sad"
-                      : "",
-                },
-              },
-              x: { grid: { display: false } },
-            },
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  label: (ctx) => {
-                    const idx = ctx.dataIndex;
-                    const point = chartData[idx];
-                    return point ? `${point.mood} (${point.value})` : ctx.formattedValue;
-                  },
-                },
-              },
-            },
-          },
-        });
-      } catch (err) {
-        console.error("❌ Chart init error:", err);
-      }
-    })();
+},[])
 
-    return () => {
-      isMounted = false;
-      if (chartInstanceRef.current) {
-        try {
-          chartInstanceRef.current.destroy();
-        } catch (e) {}
-        chartInstanceRef.current = null;
-      }
-    };
-  }, [chartData, theme]);
 
-  // ---------------------------------------------------------
-  // Create new journal entry
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
 
-    try {
-      const res = await api.post("/journal", { text, mood });
-      const newEntry = res.data?.journal || res.data;
+/* ==============================
+MOOD COLORS
+============================== */
 
-      // update state using functional update to avoid stale closure
-      setJournals((prev) => {
-        const now = Date.now();
-        const updated = [newEntry, ...prev].filter(
-          (it) => now - new Date(it.createdAt).getTime() <= KEEP_MS
-        );
-        return updated;
-      });
+const moodColors={
+happy:"#4ade80",
+neutral:"#9CA3AF",
+anxious:"#FB923C",
+sad:"#60A5FA",
+angry:"#EF4444",
+tired:"#A78BFA"
+}
 
-      setText("");
-      setMood("");
-    } catch (err) {
-      console.error("❌ Error saving journal:", err);
-      setError("Failed to save entry.");
-    } finally {
-      setLoading(false);
-    }
-  };
+const moodToValue=(m)=>
+m==="happy"?4:
+m==="neutral"?3:
+m==="anxious"?2:
+m==="sad"?1:0
 
-  // ---------------------------------------------------------
-  // Edit an entry
-  const handleEdit = async (id, updatedText) => {
-    try {
-      const res = await api.put(`/journal/${id}`, { text: updatedText });
-      const updated = res.data?.journal || res.data;
-      setJournals((prev) => prev.map((j) => (j._id === id ? updated : j)));
-    } catch (err) {
-      console.error("❌ Edit error:", err);
-    }
-  };
 
-  // ---------------------------------------------------------
-  // Delete an entry
-  const handleDelete = async (id) => {
-    try {
-      await api.delete(`/journal/${id}`);
-      setJournals((prev) => prev.filter((j) => j._id !== id));
-    } catch (err) {
-      console.error("❌ Delete error:", err);
-    }
-  };
 
-  // ---------------------------------------------------------
-  // Group entries by date for rendering
-  const groupedEntries = journals.reduce((acc, entry) => {
-    const date = new Date(entry.createdAt).toLocaleDateString();
-    if (!acc[date]) acc[date] = [];
-    acc[date].push(entry);
-    return acc;
-  }, {});
+/* ==============================
+CHART DATA
+============================== */
 
-  const filteredEntries = Object.entries(groupedEntries).map(([date, entries]) => [
-    date,
-    entries.filter(
-      (e) =>
-        (!filterMood || e.mood === filterMood) &&
-        e.text.toLowerCase().includes(search.toLowerCase())
-    ),
-  ]);
+const chartData=journals
+.slice()
+.filter(e=>Date.now()-new Date(e.createdAt)<=KEEP_MS)
+.sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt))
+.map(entry=>({
+date:new Date(entry.createdAt).toLocaleDateString(),
+mood:entry.mood,
+value:moodToValue(entry.mood)
+}))
 
-  // ---------------------------------------------------------
-  const pageBg = theme === "dark" ? "bg-gray-900" : "bg-purple-50";
-  const cardBg = theme === "dark" ? "bg-gray-800" : "bg-white";
-  const borderColor = theme === "dark" ? "border-gray-700" : "border-gray-300";
-  const textColor = theme === "dark" ? "text-gray-200" : "text-gray-900";
 
-  return (
-    <div className={`${pageBg} p-6 min-h-screen`}>
-      <h1 className={`text-2xl font-bold mb-4 ${textColor}`}>My Journal</h1>
 
-      {/* Graph */}
-      <div className={`${cardBg} border ${borderColor} p-4 rounded-lg shadow mb-6`}>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className={`text-lg font-bold ${textColor}`}>Mood Trend (Last 30 days)</h2>
-          <div className="text-sm text-gray-500">Points colored by mood</div>
-        </div>
-        {chartData.length > 1 ? (
-          <div style={{ height: 220 }}>
-            <canvas ref={chartRef}></canvas>
-          </div>
-        ) : (
-          <p className="text-gray-400">Not enough data to show graph.</p>
-        )}
-      </div>
+/* ==============================
+CHART
+============================== */
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="mb-6 space-y-4">
-        <textarea
-          rows="4"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Write your thoughts..."
-          className={`w-full p-3 rounded-lg border ${borderColor} ${cardBg} ${textColor}`}
-          required
-        />
-        <div className="flex gap-3 flex-wrap">
-          {["happy", "sad", "anxious", "neutral", "tired", "angry"].map((m) => (
-            <button
-              type="button"
-              key={m}
-              onClick={() => setMood(m)}
-              className={`px-4 py-2 rounded-lg border ${
-                mood === m ? "bg-purple-600 text-white" : "bg-gray-200 dark:bg-gray-700"
-              }`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-        <button type="submit" disabled={loading} className="px-4 py-2 bg-purple-600 text-white rounded-lg">
-          {loading ? "Saving..." : "Save Entry"}
-        </button>
-      </form>
+useEffect(()=>{
 
-      {/* Filters */}
-      <div className="mb-6 flex gap-4 flex-wrap">
-        <input
-          type="text"
-          placeholder="Search..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="p-2 rounded-lg border"
-        />
-        <select value={filterMood} onChange={(e) => setFilterMood(e.target.value)} className="p-2 rounded-lg border">
-          <option value="">All moods</option>
-          <option value="happy">Happy</option>
-          <option value="sad">Sad</option>
-          <option value="anxious">Anxious</option>
-          <option value="neutral">Neutral</option>
-          <option value="tired">Tired</option>
-          <option value="angry">Angry</option>
-        </select>
-      </div>
+if(!chartRef.current) return
 
-      {/* Entries */}
-      {filteredEntries.map(([date, entries]) =>
-        entries.length > 0 ? (
-          <div key={date} className="mb-6">
-            <h2 className={`text-lg font-bold mb-3 ${textColor}`}>{date}</h2>
-            {entries.map((entry) => (
-              <div key={entry._id} className={`${cardBg} border ${borderColor} p-4 rounded-lg mb-3`}>
-                <p className={textColor}>{entry.text}</p>
-                <p className="text-sm mt-1 text-gray-500">Mood: {entry.mood}</p>
-                <div className="flex gap-3 mt-2">
-                  <button
-                    onClick={() => {
-                      const newText = prompt("Edit entry:", entry.text);
-                      if (newText) handleEdit(entry._id, newText);
-                    }}
-                    className="text-blue-500 text-sm"
-                  >
-                    Edit
-                  </button>
-                  <button onClick={() => handleDelete(entry._id)} className="text-red-500 text-sm">
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null
-      )}
-    </div>
-  );
+let chart
+
+const createChart=async()=>{
+
+const ChartModule=await import("chart.js/auto")
+const Chart=ChartModule.default
+
+const ctx=chartRef.current.getContext("2d")
+
+if(chartInstanceRef.current)
+chartInstanceRef.current.destroy()
+
+chart=new Chart(ctx,{
+
+type:"line",
+
+data:{
+labels:chartData.map(d=>d.date),
+datasets:[{
+data:chartData.map(d=>d.value),
+borderColor:"#8b5cf6",
+backgroundColor:"rgba(139,92,246,0.2)",
+tension:0.4,
+fill:true,
+pointRadius:6,
+pointBackgroundColor:chartData.map(d=>moodColors[d.mood])
+}]
+},
+
+options:{
+plugins:{legend:{display:false}},
+scales:{
+y:{
+min:0,
+max:4
+}
+}
+}
+
+})
+
+chartInstanceRef.current=chart
+
+}
+
+createChart()
+
+return()=>{
+if(chartInstanceRef.current){
+chartInstanceRef.current.destroy()
+chartInstanceRef.current=null
+}
+}
+
+},[chartData,theme])
+
+
+
+/* ==============================
+HEATMAP
+============================== */
+
+const heatmapData=journals.map(j=>({
+date:new Date(j.createdAt).toISOString().slice(0,10),
+count:moodToValue(j.mood)
+}))
+
+
+
+/* ==============================
+STATS
+============================== */
+
+const moodStats=journals.reduce((acc,j)=>{
+acc[j.mood]=(acc[j.mood]||0)+1
+return acc
+},{})
+
+const wordCount=text.trim().split(/\s+/).filter(Boolean).length
+
+
+
+/* ==============================
+CREATE ENTRY
+============================== */
+
+const handleSubmit=async(e)=>{
+
+e.preventDefault()
+
+try{
+
+setLoading(true)
+
+const res=await api.post("/journal",{text,mood})
+
+const newEntry=res.data?.journal||res.data
+
+setJournals(prev=>[newEntry,...prev])
+
+setText("")
+setMood("")
+resetTranscript()
+
+}
+finally{
+setLoading(false)
+}
+
+}
+
+
+
+/* ==============================
+FILTER
+============================== */
+
+const filtered=journals.filter(e=>
+(!filterMood||e.mood===filterMood)&&
+e.text.toLowerCase().includes(search.toLowerCase())
+)
+
+
+
+/* ==============================
+THEME
+============================== */
+
+const pageBg=theme==="dark"
+?"bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 text-white"
+:"bg-gradient-to-br from-purple-50 via-white to-purple-100 text-gray-900"
+
+const cardBg=theme==="dark"?"bg-gray-800":"bg-white"
+
+
+
+/* ==============================
+UI
+============================== */
+
+return(
+
+<div className={`${pageBg} min-h-screen px-6 py-10`}>
+
+{/* HEADER */}
+
+<div className="max-w-6xl mx-auto mb-12 text-center">
+
+<h1 className="text-5xl font-bold bg-gradient-to-r from-purple-500 to-indigo-500 bg-clip-text text-transparent">
+My Journal
+</h1>
+
+<p className="text-gray-500 mt-3 text-lg">
+Reflect on your thoughts and track your emotional journey
+</p>
+
+</div>
+
+
+
+{/* ANALYTICS */}
+
+<div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-6 mb-12">
+
+{Object.entries(moodStats).map(([m,count])=>(
+
+<div
+key={m}
+className={`${cardBg} p-6 rounded-2xl shadow-lg hover:scale-[1.03] transition`}
+>
+
+<p className="text-sm text-gray-400 capitalize">
+Mood
+</p>
+
+<h3 className="text-xl font-semibold capitalize">
+{m}
+</h3>
+
+<p className="text-3xl font-bold text-purple-500 mt-2">
+{count}
+</p>
+
+</div>
+
+))}
+
+</div>
+
+
+
+{/* HEATMAP */}
+
+<div className={`max-w-6xl mx-auto ${cardBg} p-8 rounded-3xl shadow-lg mb-12`}>
+
+<h2 className="text-xl font-semibold mb-6">
+🔥 Mood Activity
+</h2>
+
+<CalendarHeatmap
+startDate={subDays(new Date(),120)}
+endDate={new Date()}
+values={heatmapData}
+/>
+
+</div>
+
+
+
+{/* MOOD CHART */}
+
+<div className={`max-w-6xl mx-auto ${cardBg} p-8 rounded-3xl shadow-lg mb-12`}>
+
+<h2 className="text-xl font-semibold mb-6">
+📈 Mood Trend
+</h2>
+
+{chartData.length>1
+? <canvas ref={chartRef} className="h-60"></canvas>
+: <p className="text-gray-400">Not enough data yet</p>
+}
+
+</div>
+
+
+
+{/* JOURNAL FORM */}
+
+<form
+onSubmit={handleSubmit}
+className={`${cardBg} max-w-3xl mx-auto p-10 rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-700 space-y-8`}
+>
+
+
+{/* TEXTAREA */}
+
+<div>
+
+<textarea
+rows="6"
+value={text}
+onChange={(e)=>{
+setText(e.target.value)
+if(!mood) setMood(detectEmotion(e.target.value))
+}}
+placeholder="Write your thoughts and feelings..."
+className="w-full p-6 rounded-2xl border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-purple-500 focus:outline-none resize-none text-lg bg-transparent"
+/>
+
+
+<div className="flex justify-between mt-3 text-sm text-gray-400">
+
+<span>{wordCount} words</span>
+
+<span className="px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-300">
+AI mood: {detectEmotion(text)}
+</span>
+
+</div>
+
+</div>
+
+
+
+{/* VOICE CONTROLS */}
+
+<div className="flex items-center gap-4">
+
+<button
+type="button"
+onClick={()=>SpeechRecognition.startListening()}
+className="px-5 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl shadow"
+>
+🎙 Start
+</button>
+
+<button
+type="button"
+onClick={()=>SpeechRecognition.stopListening()}
+className="px-5 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl shadow"
+>
+Stop
+</button>
+
+<button
+type="button"
+onClick={resetTranscript}
+className="px-5 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-xl"
+>
+Clear
+</button>
+
+<span className="text-sm text-gray-400">
+{listening ? "🎧 Listening..." : "Voice off"}
+</span>
+
+</div>
+
+
+
+{/* MOOD SELECTOR */}
+
+<div>
+
+<p className="text-sm font-medium mb-3 text-gray-500">
+How are you feeling?
+</p>
+
+<div className="grid grid-cols-3 gap-3">
+
+{[
+{emoji:"😊",value:"happy"},
+{emoji:"😐",value:"neutral"},
+{emoji:"😰",value:"anxious"},
+{emoji:"😢",value:"sad"},
+{emoji:"😴",value:"tired"},
+{emoji:"😡",value:"angry"}
+].map(m=>(
+
+<button
+key={m.value}
+type="button"
+onClick={()=>setMood(m.value)}
+className={`flex flex-col items-center py-4 rounded-2xl border transition
+${mood===m.value
+?"bg-purple-600 text-white scale-105 shadow-lg"
+:"bg-gray-100 dark:bg-gray-700 hover:bg-gray-200"}
+`}
+>
+
+<span className="text-2xl">{m.emoji}</span>
+<span className="text-sm capitalize">{m.value}</span>
+
+</button>
+
+))}
+
+</div>
+
+</div>
+
+
+
+{/* SAVE BUTTON */}
+
+<div className="flex justify-end">
+
+<button
+disabled={loading}
+className="px-8 py-3 rounded-xl text-white font-medium 
+bg-gradient-to-r from-purple-500 to-purple-700
+hover:scale-105 transition shadow-lg disabled:opacity-50"
+>
+
+{loading ? "Saving..." : "Save Entry"}
+
+</button>
+
+</div>
+
+</form>
+
+
+
+{/* ENTRIES */}
+
+<div className="max-w-4xl mx-auto space-y-6 mt-12">
+
+{filtered.map(entry=>(
+
+<div
+key={entry._id}
+className={`${cardBg} p-6 rounded-2xl shadow-lg hover:shadow-xl transition`}
+>
+
+<p className="text-lg leading-relaxed">
+{entry.text}
+</p>
+
+<div className="flex justify-between mt-4 text-sm text-gray-400">
+
+<p>Mood: {entry.mood}</p>
+
+<p>
+{new Date(entry.createdAt).toLocaleDateString()}
+</p>
+
+</div>
+
+</div>
+
+))}
+
+</div>
+
+</div>
+
+)
+
 }

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, User, Mic, MicOff, Loader2, Volume2 } from "lucide-react";
+import { Send, Bot, User, Mic, MicOff, Loader2, Volume2, Heart } from "lucide-react";
 import { useTheme } from "../context/ThemeContext.jsx";
 
 const moods = [
@@ -11,328 +11,360 @@ const moods = [
   { label: "😴", value: "tired" },
 ];
 
+const quickPrompts = [
+  "I'm feeling stressed today",
+  "I can't sleep well",
+  "How can I relax?",
+  "I feel anxious about work",
+];
+
 export default function Chat() {
-  const { theme } = useTheme();
 
-  // 🎯 State
-  const [mood, setMood] = useState("");
-  const [message, setMessage] = useState("");
-  const [chatHistory, setChatHistory] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [mediaRecorder, setMediaRecorder] = useState(null);
-  const [audioChunks, setAudioChunks] = useState([]);
-  const [speakEnabled, setSpeakEnabled] = useState(false);
+const { theme } = useTheme()
 
-  const chatContainerRef = useRef(null);
-  const lastMessageTypeRef = useRef("user");
+const [mood,setMood]=useState("")
+const [message,setMessage]=useState("")
+const [chatHistory,setChatHistory]=useState([])
+const [loading,setLoading]=useState(false)
+const [recording,setRecording]=useState(false)
+const [mediaRecorder,setMediaRecorder]=useState(null)
+const [speakEnabled,setSpeakEnabled]=useState(false)
 
-  // 🔁 Auto-scroll to latest message
-  useEffect(() => {
-    const container = chatContainerRef.current;
-    if (!container) return;
+const chatContainerRef=useRef(null)
 
-    const isNewMessage = chatHistory.at(-1)?.sender !== lastMessageTypeRef.current;
+/* LOAD CHAT */
 
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: isNewMessage ? "smooth" : "instant",
-    });
+useEffect(()=>{
+const saved=localStorage.getItem("mindcare_chat")
+if(saved) setChatHistory(JSON.parse(saved))
+},[])
 
-    lastMessageTypeRef.current = chatHistory.at(-1)?.sender;
-  }, [chatHistory, message, loading]);
+useEffect(()=>{
+localStorage.setItem("mindcare_chat",JSON.stringify(chatHistory))
+},[chatHistory])
 
-  // 🎙️ Start recording
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks = [];
+/* AUTO SCROLL */
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
+useEffect(()=>{
 
-      recorder.onstop = async () => {
-        setRecording(false);
-        const audioBlob = new Blob(chunks, { type: "audio/webm" });
-        setAudioChunks([]);
-        await handleVoiceUpload(audioBlob);
-      };
+const container=chatContainerRef.current
+if(!container) return
 
-      recorder.start();
-      setMediaRecorder(recorder);
-      setAudioChunks(chunks);
-      setRecording(true);
-    } catch (err) {
-      console.error("Mic access denied:", err);
-      alert("Please allow microphone permissions to record your voice.");
-    }
-  };
+container.scrollTop=container.scrollHeight
 
-  // ⏹️ Stop recording
-  const stopRecording = () => {
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    }
-  };
+},[chatHistory,loading])
 
-  // 🧠 Handle voice upload + transcription
-  const handleVoiceUpload = async (audioBlob) => {
-    setLoading(true);
-    try {
-      const formData = new FormData();
-      // ✅ Backend expects "file"
-      formData.append("file", audioBlob, "voice.webm");
+/* SEND MESSAGE */
 
-      const res = await fetch("http://localhost:5000/api/auth/voice-transcribe", {
-        method: "POST",
-        body: formData,
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
+const sendMessage=async(customMessage)=>{
 
-      if (!res.ok) throw new Error("Transcription failed");
-      const data = await res.json();
+const finalMessage=customMessage||message
 
-      const transcript = data.text?.trim() || "Unable to transcribe audio. Try again.";
-      const updatedHistory = [...chatHistory, { sender: "user", text: transcript, mood }];
-      setChatHistory(updatedHistory);
+if(!finalMessage.trim()) return
 
-      // 🎯 Send transcript to chat endpoint
-      const aiRes = await fetch("http://localhost:5000/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({ message: transcript, mood }),
-      });
+const userMessage={
+sender:"user",
+text:finalMessage,
+time:Date.now()
+}
 
-      const aiData = await aiRes.json();
-      const aiReply = aiData.reply || "I'm here for you 💙";
+const updated=[...chatHistory,userMessage]
 
-      const finalHistory = [...updatedHistory, { sender: "ai", text: aiReply }];
-      setChatHistory(finalHistory);
+setChatHistory(updated)
+setLoading(true)
 
-      // 🔊 Optional voice output
-      if (speakEnabled) {
-        const synth = window.speechSynthesis;
-        const utter = new SpeechSynthesisUtterance(aiReply);
-        utter.rate = 1;
-        utter.pitch = 1;
-        synth.speak(utter);
-      }
-    } catch (err) {
-      console.error("Voice chat error:", err);
-      setChatHistory((prev) => [
-        ...prev,
-        { sender: "ai", text: "⚠️ Voice service unavailable. Try again later." },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
+try{
 
-  // 💬 Send text message
-  const sendMessage = async (customMessage) => {
-    const finalMessage = customMessage || message;
-    if (!finalMessage.trim()) return;
+const res=await fetch("http://localhost:5000/api/chat",{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+Authorization:`Bearer ${localStorage.getItem("token")}`
+},
+body:JSON.stringify({message:finalMessage,mood})
+})
 
-    const newHistory = [...chatHistory, { sender: "user", text: finalMessage, mood }];
-    setChatHistory(newHistory);
-    setLoading(true);
+const data=await res.json()
 
-    try {
-      const res = await fetch("http://localhost:5000/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({ message: finalMessage, mood }),
-      });
+const aiReply=data.reply||"I'm here for you 💙"
 
-      const data = await res.json();
-      const aiReply = data.reply || "I’m here for you 💙";
-      setChatHistory([...newHistory, { sender: "ai", text: aiReply }]);
+const aiMessage={
+sender:"ai",
+text:aiReply,
+time:Date.now()
+}
 
-      if (speakEnabled) {
-        const synth = window.speechSynthesis;
-        const utter = new SpeechSynthesisUtterance(aiReply);
-        synth.speak(utter);
-      }
-    } catch (err) {
-      console.error("Text chat error:", err);
-      setChatHistory([
-        ...newHistory,
-        { sender: "ai", text: "⚠️ AI service unavailable, try later." },
-      ]);
-    } finally {
-      setMessage("");
-      setLoading(false);
-    }
-  };
+setChatHistory([...updated,aiMessage])
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !loading) sendMessage();
-  };
+if(speakEnabled){
 
-  // 💭 Chat message bubble
-  const ChatMessage = ({ sender, text }) => {
-    const isUser = sender === "user";
+const utter=new SpeechSynthesisUtterance(aiReply)
+window.speechSynthesis.speak(utter)
 
-    const bubbleBg = isUser
-      ? theme === "dark"
-        ? "bg-gradient-to-r from-blue-600 to-blue-400 text-white"
-        : "bg-gradient-to-r from-blue-500 to-purple-400 text-white"
-      : theme === "dark"
-      ? "bg-gradient-to-r from-gray-700 to-gray-600 text-gray-100"
-      : "bg-gray-100 text-gray-900";
+}
 
-    const avatarColor = isUser
-      ? theme === "dark"
-        ? "bg-blue-600"
-        : "bg-blue-500"
-      : theme === "dark"
-      ? "bg-gray-700"
-      : "bg-gray-300";
+}catch{
 
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className={`flex items-start gap-2 my-2 sm:my-3 ${
-          isUser ? "justify-end" : "justify-start"
-        }`}
-      >
-        {!isUser && (
-          <div className={`w-8 h-8 flex items-center justify-center rounded-full ${avatarColor}`}>
-            <Bot size={18} />
-          </div>
-        )}
-        <div
-          className={`p-3 rounded-2xl shadow-md max-w-[75%] sm:max-w-[70%] md:max-w-[60%] ${bubbleBg} ${
-            isUser ? "rounded-br-none" : "rounded-bl-none"
-          }`}
-        >
-          {text}
-        </div>
-        {isUser && (
-          <div className={`w-8 h-8 flex items-center justify-center rounded-full ${avatarColor}`}>
-            <User size={18} />
-          </div>
-        )}
-      </motion.div>
-    );
-  };
+setChatHistory([
+...updated,
+{sender:"ai",text:"⚠️ AI unavailable"}
+])
 
-  // 🧩 UI Layout
-  return (
-    <div
-      className={`flex flex-col h-screen p-2 sm:p-4 transition-colors duration-300 ${
-        theme === "dark"
-          ? "bg-gray-900 text-white"
-          : "bg-gradient-to-b from-blue-50 to-white text-gray-900"
-      }`}
-    >
-      <div className="flex-1 flex justify-center overflow-hidden">
-        <div className="flex flex-col w-full max-w-2xl">
-          {/* Mood Selector */}
-          <div className="flex justify-center gap-4 mb-4">
-            {moods.map((m) => (
-              <motion.button
-                key={m.value}
-                onClick={() => setMood(m.value)}
-                whileHover={{ scale: 1.2 }}
-                whileTap={{ scale: 0.95 }}
-                className={`text-2xl p-2 rounded-full shadow-md transition-all ${
-                  mood === m.value ? "ring-4 ring-purple-500" : ""
-                } ${theme === "dark" ? "bg-gray-700" : "bg-white"}`}
-              >
-                {m.label}
-              </motion.button>
-            ))}
-          </div>
+}
 
-          {/* Chat Area */}
-          <div
-            ref={chatContainerRef}
-            className={`flex-1 overflow-y-auto p-4 rounded-lg shadow-inner border ${
-              theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
-            }`}
-          >
-            <AnimatePresence>
-              {chatHistory.map((msg, idx) => (
-                <ChatMessage key={idx} sender={msg.sender} text={msg.text} />
-              ))}
-            </AnimatePresence>
-            {loading && (
-              <div className="flex items-center gap-2 text-gray-500 italic">
-                <Loader2 className="animate-spin" size={16} /> Thinking...
-              </div>
-            )}
-          </div>
+setMessage("")
+setLoading(false)
 
-          {/* Input Row */}
-          <div className="flex mt-3 sm:mt-4 gap-2 items-center sticky bottom-0 bg-inherit pb-2 pt-2">
-            {/* 🎙️ Mic Button */}
-            <motion.button
-              onClick={recording ? stopRecording : startRecording}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              className={`p-3 rounded-full shadow-lg ${
-                recording
-                  ? "bg-red-500 text-white animate-pulse"
-                  : theme === "dark"
-                  ? "bg-gray-700 text-purple-300"
-                  : "bg-gray-200 text-purple-700"
-              }`}
-            >
-              {recording ? <MicOff size={20} /> : <Mic size={20} />}
-            </motion.button>
+}
 
-            {/* Text Input */}
-            <input
-              type="text"
-              value={message}
-              placeholder="Type or speak your message..."
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={loading}
-              className={`flex-1 p-3 border rounded-full shadow focus:outline-none focus:ring-2 focus:ring-purple-400 text-sm sm:text-base transition-colors ${
-                theme === "dark"
-                  ? "bg-gray-800 text-white border-gray-700 placeholder-gray-400"
-                  : "bg-white text-gray-900 border-gray-300 placeholder-gray-500"
-              }`}
-            />
+/* VOICE RECORD */
 
-            {/* Send Button */}
-            <motion.button
-              onClick={() => sendMessage()}
-              disabled={loading}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              className={`p-3 rounded-full shadow-lg ${
-                theme === "dark" ? "bg-purple-500 text-white" : "bg-purple-600 text-white"
-              }`}
-            >
-              <Send size={20} />
-            </motion.button>
+const startRecording=async()=>{
 
-            {/* 🔈 Voice Output Toggle */}
-            <motion.button
-              onClick={() => setSpeakEnabled((prev) => !prev)}
-              whileHover={{ scale: 1.1 }}
-              title="Toggle AI voice reply"
-              className={`p-3 rounded-full shadow-lg ${
-                speakEnabled ? "bg-green-500 text-white" : "bg-gray-300 text-gray-700"
-              }`}
-            >
-              <Volume2 size={20} />
-            </motion.button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+try{
+
+const stream=await navigator.mediaDevices.getUserMedia({audio:true})
+const recorder=new MediaRecorder(stream)
+
+const chunks=[]
+
+recorder.ondataavailable=(e)=>{
+if(e.data.size>0) chunks.push(e.data)
+}
+
+recorder.onstop=()=>{
+
+setRecording(false)
+
+const audioBlob=new Blob(chunks,{type:"audio/webm"})
+
+sendMessage("Voice message received")
+
+}
+
+recorder.start()
+
+setMediaRecorder(recorder)
+setRecording(true)
+
+}catch{
+alert("Microphone permission needed")
+}
+
+}
+
+const stopRecording=()=>{
+
+if(mediaRecorder && mediaRecorder.state!=="inactive")
+mediaRecorder.stop()
+
+}
+
+/* MESSAGE COMPONENT */
+
+const ChatMessage=({sender,text,time})=>{
+
+const isUser=sender==="user"
+
+return(
+
+<motion.div
+initial={{opacity:0,y:10}}
+animate={{opacity:1,y:0}}
+className={`flex ${isUser?"justify-end":"justify-start"} mb-4`}
+>
+
+<div className="flex gap-2 items-end">
+
+{!isUser && (
+<div className="w-8 h-8 flex items-center justify-center rounded-full bg-purple-500 text-white">
+<Bot size={16}/>
+</div>
+)}
+
+<div
+className={`max-w-[70%] p-3 rounded-2xl shadow-md ${
+isUser
+?"bg-purple-600 text-white"
+:theme==="dark"
+?"bg-gray-700 text-gray-100"
+:"bg-white"
+}`}
+>
+
+<p className="text-sm">{text}</p>
+
+<div className="flex justify-between mt-1">
+
+<span className="text-[10px] opacity-60">
+{new Date(time).toLocaleTimeString([],{
+hour:"2-digit",
+minute:"2-digit"
+})}
+</span>
+
+{!isUser && (
+<button className="opacity-60 hover:opacity-100">
+<Heart size={12}/>
+</button>
+)}
+
+</div>
+
+</div>
+
+{isUser && (
+<div className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-300">
+<User size={16}/>
+</div>
+)}
+
+</div>
+
+</motion.div>
+
+)
+
+}
+
+/* TYPING */
+
+const TypingIndicator=()=>(
+<div className="flex gap-1 p-3">
+<span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
+<span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></span>
+<span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></span>
+</div>
+)
+
+/* UI */
+
+return(
+
+<div className={`flex flex-col h-screen p-4 ${
+theme==="dark"
+?"bg-gray-900 text-white"
+:"bg-gradient-to-b from-blue-50 to-white"
+}`}>
+
+<div className="flex justify-center">
+
+<div className="w-full max-w-3xl flex flex-col">
+
+{/* MOOD SELECTOR */}
+
+<div className="flex justify-center gap-4 mb-4">
+
+{moods.map(m=>(
+<motion.button
+whileTap={{scale:0.9}}
+key={m.value}
+onClick={()=>setMood(m.value)}
+className={`text-2xl p-2 rounded-full ${
+mood===m.value?"ring-4 ring-purple-500":""
+}`}
+>
+{m.label}
+</motion.button>
+))}
+
+</div>
+
+{/* QUICK PROMPTS */}
+
+<div className="flex flex-wrap gap-2 mb-3 justify-center">
+
+{quickPrompts.map((p,i)=>(
+<motion.button
+whileHover={{scale:1.05}}
+key={i}
+onClick={()=>sendMessage(p)}
+className="text-xs px-3 py-1 rounded-full bg-purple-100 dark:bg-gray-700"
+>
+{p}
+</motion.button>
+))}
+
+</div>
+
+{/* CHAT WINDOW */}
+
+<div
+ref={chatContainerRef}
+className="flex-1 overflow-y-auto p-4 rounded-xl border bg-white dark:bg-gray-800"
+>
+
+{chatHistory.length===0 &&(
+
+<div className="text-center opacity-60 mt-20">
+
+<Bot size={40} className="mx-auto mb-2"/>
+
+Start chatting with your AI companion
+
+</div>
+
+)}
+
+<AnimatePresence>
+
+{chatHistory.map((msg,i)=>(
+<ChatMessage key={i} {...msg}/>
+))}
+
+</AnimatePresence>
+
+{loading && <TypingIndicator/>}
+
+</div>
+
+{/* INPUT BAR */}
+
+<div className="flex gap-2 mt-4 items-center">
+
+<button
+onClick={recording?stopRecording:startRecording}
+className={`p-3 rounded-full ${
+recording?"bg-red-500":"bg-gray-300"
+}`}
+>
+{recording?<MicOff size={18}/>:<Mic size={18}/>}
+</button>
+
+<input
+value={message}
+onChange={e=>setMessage(e.target.value)}
+onKeyDown={(e)=>e.key==="Enter" && sendMessage()}
+placeholder="Type your message..."
+className="flex-1 p-3 border rounded-full"
+>
+
+</input>
+
+<button
+onClick={()=>sendMessage()}
+className="p-3 rounded-full bg-purple-600 text-white"
+>
+<Send size={18}/>
+</button>
+
+<button
+onClick={()=>setSpeakEnabled(!speakEnabled)}
+className={`p-3 rounded-full ${
+speakEnabled?"bg-green-500 text-white":"bg-gray-300"
+}`}
+>
+<Volume2 size={18}/>
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+)
+
 }
