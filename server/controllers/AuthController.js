@@ -26,60 +26,34 @@ export const registerUser = async (req, res) => {
 
     const { name, email, password, avatar, theme } = req.body;
 
-    // 🛑 Validate fields
     if (!name || !email || !password) {
-      return res.status(400).json({ message: "Name, email and password are required" });
+      return res.status(400).json({
+        message: "Name, email and password are required",
+      });
     }
 
-    // 🔎 Check if user already exists
-    const existingUser = await User.findOne({ email });
+    // ⚡ FAST CHECK (indexed email required)
+    const existingUser = await User.findOne({ email }).lean();
     if (existingUser) {
-      console.warn("⚠️ Email already registered:", email);
       return res.status(400).json({ message: "User already exists" });
     }
 
-    // 🏗 Create new user and hash password using .save()
+    // ⚡ CREATE USER
     const user = new User({
       name,
       email,
-      password, // raw password — will be hashed by pre('save') middleware
+      password,
       avatar: avatar || "",
-      theme: ["light", "dark", "system"].includes(theme) ? theme : "light",
+      theme: ["light", "dark", "system"].includes(theme)
+        ? theme
+        : "light",
     });
 
-    await user.save(); // 🔐 ensures password hashing occurs
+    await user.save();
 
     console.log("✅ User created:", user._id.toString());
 
-    // 📧 Send Welcome Email (non-blocking, optional)
-    if (process.env.EMAIL_USER && transporter) {
-      transporter
-        .sendMail({
-          from: `"MindCare" <${process.env.EMAIL_USER}>`,
-          to: user.email,
-          subject: "🎉 Welcome to MindCare!",
-          html: `
-            <h2>Hello ${user.name},</h2>
-            <p>Welcome to <strong>MindCare</strong> 🌱</p>
-            <p>Your wellness journey just began!</p>
-            <a href="${process.env.CLIENT_URL || ""}/login"
-              style="padding:10px 18px;background:#6D28D9;color:#fff;
-              border-radius:8px;text-decoration:none;font-size:14px;">
-              Login Now
-            </a>
-            <br/><br/>
-            <small style="color:gray;">
-              If you didn’t create this account, you may safely ignore this email.
-            </small>
-          `,
-        })
-        .then(() => console.log("📨 Welcome email sent to:", user.email))
-        .catch((err) => console.warn("⚠️ Email send error:", err.message));
-    } else {
-      console.log("📭 Skipping welcome email — EMAIL_USER not configured");
-    }
-
-    // 🎫 Return response
+    // ⚡ SEND RESPONSE IMMEDIATELY (DON'T BLOCK)
     res.status(201).json({
       _id: user._id,
       name: user.name,
@@ -87,6 +61,25 @@ export const registerUser = async (req, res) => {
       avatar: user.avatar,
       theme: user.theme,
       token: generateToken(user._id),
+    });
+
+    // ⚡ BACKGROUND EMAIL (AFTER RESPONSE)
+    setImmediate(() => {
+      if (process.env.EMAIL_USER && transporter) {
+        transporter
+          .sendMail({
+            from: `"MindCare" <${process.env.EMAIL_USER}>`,
+            to: user.email,
+            subject: "🎉 Welcome to MindCare!",
+            html: `<h2>Hello ${user.name}</h2><p>Welcome to MindCare 🌱</p>`,
+          })
+          .then(() =>
+            console.log("📨 Email sent:", user.email)
+          )
+          .catch((err) =>
+            console.warn("⚠️ Email error:", err.message)
+          );
+      }
     });
 
   } catch (error) {
@@ -99,20 +92,29 @@ export const registerUser = async (req, res) => {
 };
 
 
-
 export const loginUser = async (req, res) => {
   try {
     console.log("LOGIN BODY:", req.body);
 
     const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ message: "Email and password required" });
+
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "Email and password required",
+      });
+    }
 
     const user = await User.findOne({ email }).select("+password");
-    if (!user) return res.status(401).json({ message: "Invalid credentials" });
+
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
     const isMatch = await user.matchPassword(password);
-    if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
+
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
     res.json({
       _id: user._id,
@@ -125,12 +127,12 @@ export const loginUser = async (req, res) => {
 
   } catch (error) {
     console.error("❌ LOGIN ERROR:", error.message);
-    res.status(500).json({ message: "Server crash", error: error.message });
+    res.status(500).json({
+      message: "Server crash",
+      error: error.message,
+    });
   }
 };
-
-
-
 
 
 // ---------------- PROFILE ----------------

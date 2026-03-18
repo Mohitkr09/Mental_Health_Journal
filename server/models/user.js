@@ -14,14 +14,14 @@ const userSchema = new mongoose.Schema(
       required: [true, "Email is required"],
       unique: true,
       lowercase: true,
-      index: true, // Faster lookups
+      index: true, // 🚀 important for fast login/register
     },
 
     password: {
       type: String,
       required: [true, "Password is required"],
       minlength: 6,
-      select: false, // Do not expose by default
+      select: false,
     },
 
     avatar: { type: String, default: "" },
@@ -60,13 +60,16 @@ const userSchema = new mongoose.Schema(
 );
 
 /* ===========================================================
-   🔐 HASH PASSWORD BEFORE SAVE
+   🔐 FAST PASSWORD HASHING (OPTIMIZED)
 =========================================================== */
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
 
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  // ⚡ Faster hashing (no separate genSalt)
+  this.password = await bcrypt.hash(this.password, 8); 
+  // 👉 8 = fast + secure enough
+  // 👉 10+ = slower (use in production if needed)
+
   next();
 });
 
@@ -75,9 +78,10 @@ userSchema.pre("save", async function (next) {
 =========================================================== */
 userSchema.methods.matchPassword = async function (enteredPassword) {
   if (!this.password) {
-    throw new Error("Password not loaded. Use select('+password') in query");
+    throw new Error("Password not loaded. Use select('+password')");
   }
-  return bcrypt.compare(enteredPassword, this.password);
+
+  return await bcrypt.compare(enteredPassword, this.password);
 };
 
 /* ===========================================================
@@ -90,7 +94,7 @@ userSchema.methods.toggleTheme = async function () {
 };
 
 /* ===========================================================
-   🚫 REMOVE SENSITIVE FIELDS FROM API RESPONSE
+   🚫 REMOVE SENSITIVE FIELDS
 =========================================================== */
 userSchema.set("toJSON", {
   transform(doc, ret) {
