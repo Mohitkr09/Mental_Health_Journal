@@ -1,4 +1,3 @@
-// src/components/DailySchedule.jsx
 import React, { useState, useEffect } from "react";
 import {
   Heart,
@@ -57,108 +56,136 @@ export default function DailySchedule({ schedule, onRegenerate }) {
   };
 
   return (
-    <div className="p-6 rounded-3xl shadow-2xl border border-white/20 dark:border-gray-700 
-    bg-gradient-to-br from-white/70 to-white/40 dark:from-gray-900/70 dark:to-gray-800/50 
-    backdrop-blur-xl transition-all duration-300">
+    <div className="relative p-6 rounded-3xl overflow-hidden">
 
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h3 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            Today’s Plan
-            <span className="px-3 py-1 text-xs rounded-full bg-purple-100 text-purple-600 capitalize">
-              {localSchedule.mood}
-            </span>
-          </h3>
+      {/* BACKGROUND */}
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-200/30 to-indigo-200/30 blur-3xl -z-10"></div>
 
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {completedCount} of {total} completed • {progress}%
-          </p>
+      {/* MAIN GLASS CARD */}
+      <div className="bg-white/30 dark:bg-white/5 backdrop-blur-xl border border-white/20 
+      rounded-3xl p-6 shadow-[0_15px_50px_rgba(0,0,0,0.2)]">
+
+        {/* HEADER */}
+        <div className="flex justify-between items-center mb-6">
+
+          <div>
+            <h3 className="text-2xl font-bold flex items-center gap-3">
+              Today’s Plan
+              <span className="px-3 py-1 text-xs rounded-full 
+              bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow">
+                {localSchedule.mood}
+              </span>
+            </h3>
+
+            <p className="text-sm text-gray-500 mt-1">
+              {completedCount}/{total} completed • {progress}%
+            </p>
+          </div>
+
+          <button
+            onClick={onRegenerate}
+            className="p-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 text-white 
+            hover:rotate-180 transition duration-500 shadow-lg"
+          >
+            <RefreshCw size={18} />
+          </button>
         </div>
 
-        <button
-          onClick={onRegenerate}
-          className="p-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 text-white 
-          hover:scale-110 active:scale-95 shadow-lg transition-all duration-200"
-        >
-          <RefreshCw size={18} />
-        </button>
-      </div>
+        {/* PROGRESS BAR */}
+        <div className="relative h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden mb-8">
+          <div
+            style={{ width: `${progress}%` }}
+            className="absolute h-full bg-gradient-to-r from-purple-500 to-indigo-500 
+            shadow-[0_0_15px_rgba(124,58,237,0.9)] transition-all duration-700"
+          />
 
-      {/* Progress */}
-      <div className="relative h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden mb-8">
-        <div
-          style={{ width: `${progress}%` }}
-          className="absolute top-0 left-0 h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500"
-        />
-      </div>
+          {/* shimmer effect */}
+          <div className="absolute inset-0 bg-white/10 animate-pulse"></div>
+        </div>
 
-      {/* Tasks */}
-      <div className="space-y-4">
-        {localSchedule.items?.map((item, idx) => {
-          const done = localSchedule.completed?.includes(idx);
-          const Icon = icons[item.type] || icons.default;
+        {/* TASKS */}
+        <div className="space-y-4">
+          {localSchedule.items?.map((item, idx) => {
+            const done = localSchedule.completed?.includes(idx);
+            const Icon = icons[item.type] || icons.default;
 
-          return (
-            <div
-              key={idx}
-              onClick={() => toggle(idx)}
-              className={clsx(
-                "group flex justify-between items-center p-4 rounded-2xl cursor-pointer",
-                "transition-all duration-300 border",
-                "bg-white/60 dark:bg-gray-900/60 backdrop-blur-lg",
-                "hover:shadow-xl hover:-translate-y-[2px]",
-                done && "opacity-60 scale-[0.97]"
-              )}
-            >
-              {/* Left */}
-              <div className="flex gap-4 items-start">
-                <div className="p-2 rounded-full bg-white dark:bg-gray-800 shadow-md group-hover:scale-110 transition">
-                  {Icon}
-                </div>
-
-                <div>
-                  <p
-                    className={clsx(
-                      "font-medium text-sm",
-                      done && "line-through text-gray-400"
-                    )}
-                  >
-                    {item.title}
-                  </p>
-
-                  {item.description && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      {item.description}
-                    </p>
-                  )}
-
-                  {item.durationMins && (
-                    <p className="text-xs text-purple-500 font-medium mt-1">
-                      ⏱ {item.durationMins} min
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Right */}
-              <div className="flex items-center gap-4">
-                <span className="text-purple-600 text-sm font-semibold">
-                  {item.time}
-                </span>
-
-                {done ? (
-                  <CheckCircle2
-                    className="text-green-500 scale-110 transition"
-                    size={22}
-                  />
-                ) : (
-                  <div className="h-5 w-5 rounded-full border-2 border-purple-500 group-hover:bg-purple-100 transition" />
+            return (
+              <div
+                key={idx}
+                onClick={() => toggle(idx)}
+                className={clsx(
+                  "group relative flex justify-between items-center p-4 rounded-2xl cursor-pointer",
+                  "transition-all duration-300 border backdrop-blur-lg",
+                  "bg-white/60 dark:bg-gray-900/60",
+                  "hover:shadow-2xl hover:-translate-y-1",
+                  done &&
+                    "opacity-60 bg-gradient-to-r from-green-200/30 to-green-300/20"
                 )}
+              >
+                {/* glow border */}
+                <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 
+                bg-gradient-to-r from-purple-400 to-indigo-400 blur-xl -z-10 transition"></div>
+
+                {/* LEFT */}
+                <div className="flex gap-4 items-start">
+                  <div className="p-3 rounded-full bg-white dark:bg-gray-800 shadow-md 
+                  group-hover:scale-110 transition">
+                    {Icon}
+                  </div>
+
+                  <div>
+                    <p
+                      className={clsx(
+                        "font-medium text-sm",
+                        done && "line-through text-gray-400"
+                      )}
+                    >
+                      {item.title}
+                    </p>
+
+                    {item.description && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {item.description}
+                      </p>
+                    )}
+
+                    {/* BADGES */}
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      {item.durationMins && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-600">
+                          ⏱ {item.durationMins} min
+                        </span>
+                      )}
+
+                      {item.type && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-600 capitalize">
+                          {item.type}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* RIGHT */}
+                <div className="flex items-center gap-4">
+                  <span className="text-purple-600 text-sm font-semibold">
+                    {item.time}
+                  </span>
+
+                  {done ? (
+                    <CheckCircle2
+                      className="text-green-500 scale-110 transition"
+                      size={22}
+                    />
+                  ) : (
+                    <div className="h-5 w-5 rounded-full border-2 border-purple-500 
+                    group-hover:bg-purple-200 transition" />
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

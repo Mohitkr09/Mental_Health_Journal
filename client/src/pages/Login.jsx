@@ -12,7 +12,6 @@ export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  // Auto-clear error after 4s
   useEffect(() => {
     if (!error) return;
     const timer = setTimeout(() => setError(""), 4000);
@@ -26,7 +25,6 @@ export default function Login() {
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
 
-    // Client validation
     if (!trimmedEmail || !trimmedPassword) {
       return setError("Email and password are required");
     }
@@ -37,10 +35,7 @@ export default function Login() {
 
     try {
       setLoading(true);
-
-      // 🔥 This sends JSON correctly (fix for 500 error)
       await login(trimmedEmail, trimmedPassword);
-
       navigate("/");
     } catch (err) {
       const msg =
@@ -54,79 +49,120 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-white to-purple-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors">
-      <div className="w-full max-w-md p-8 rounded-3xl shadow-2xl border border-white/30 backdrop-blur-xl bg-white/60 dark:bg-gray-800/60 dark:border-gray-700 animate-fadeIn">
+    <div
+      className="min-h-screen flex items-center justify-center relative overflow-hidden
+      px-4 sm:px-6 lg:px-8
+      bg-gradient-to-br from-indigo-50 via-white to-purple-100
+      dark:from-gray-900 dark:via-gray-800 dark:to-gray-900"
+    >
+      {/* 🌈 RESPONSIVE GLOW */}
+      <div className="absolute w-[250px] sm:w-[400px] md:w-[500px] 
+      h-[250px] sm:h-[400px] md:h-[500px]
+      bg-purple-300/30 rounded-full blur-3xl 
+      top-[-100px] left-[-100px] animate-pulse"></div>
 
-        {/* Title */}
-        <h2 className="text-3xl font-extrabold text-center text-gray-800 dark:text-gray-100 flex items-center justify-center gap-2">
-          <LogIn size={26} className="text-purple-600" /> Login
-        </h2>
-        <p className="mt-1 mb-6 text-center text-gray-500 dark:text-gray-400 text-sm">
-          Welcome back 👋 Continue your journey
-        </p>
+      <div className="absolute w-[200px] sm:w-[350px] md:w-[400px] 
+      h-[200px] sm:h-[350px] md:h-[400px]
+      bg-indigo-300/30 rounded-full blur-3xl 
+      bottom-[-100px] right-[-100px] animate-pulse"></div>
 
-        {/* Error */}
+      {/* 🌿 CARD */}
+      <div
+        className="w-full max-w-sm sm:max-w-md md:max-w-lg
+        p-6 sm:p-8
+        rounded-3xl
+        bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl
+        border border-white/30 dark:border-gray-700
+        shadow-[0_10px_40px_rgba(0,0,0,0.15)]
+        animate-fadeIn"
+      >
+        {/* HEADER */}
+        <div className="text-center mb-6">
+          <div className="text-3xl sm:text-4xl mb-2">🧠💙</div>
+
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white">
+            Welcome Back
+          </h2>
+
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Take a breath. You're doing great 🌿
+          </p>
+        </div>
+
+        {/* ERROR */}
         {error && (
-          <p className="text-red-500 text-center mb-3 text-sm font-medium animate-pulse">
+          <p className="text-red-500 text-center mb-3 text-xs sm:text-sm animate-pulse">
             {error}
           </p>
         )}
 
-        {/* Form */}
+        {/* FORM */}
         <form className="space-y-4" onSubmit={handleLogin}>
-          {/* Email */}
-          <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus-within:ring-2 focus-within:ring-purple-500 transition">
-            <Mail className="text-purple-600" size={20} />
+
+          {/* EMAIL */}
+          <div className="flex items-center gap-3 p-3 rounded-xl
+          bg-white/80 dark:bg-gray-900/70
+          border border-gray-200 dark:border-gray-700
+          focus-within:ring-2 focus-within:ring-purple-400 transition">
+
+            <Mail className="text-purple-500" size={18} />
+
             <input
               type="email"
-              placeholder="Email Address"
+              placeholder="Email"
               disabled={loading}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="flex-1 bg-transparent focus:outline-none text-gray-800 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400"
-              required
+              className="flex-1 bg-transparent outline-none text-sm sm:text-base text-gray-800 dark:text-gray-200"
             />
           </div>
 
-          {/* Password */}
-          <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus-within:ring-2 focus-within:ring-purple-500 transition">
-            <Lock className="text-purple-600" size={20} />
+          {/* PASSWORD */}
+          <div className="flex items-center gap-3 p-3 rounded-xl
+          bg-white/80 dark:bg-gray-900/70
+          border border-gray-200 dark:border-gray-700
+          focus-within:ring-2 focus-within:ring-purple-400 transition">
+
+            <Lock className="text-purple-500" size={18} />
+
             <input
               type="password"
               placeholder="Password"
               disabled={loading}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="flex-1 bg-transparent focus:outline-none text-gray-800 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400"
-              required
+              className="flex-1 bg-transparent outline-none text-sm sm:text-base text-gray-800 dark:text-gray-200"
             />
           </div>
 
-          {/* Login Button */}
+          {/* BUTTON */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg text-sm font-semibold transition-all active:scale-95 disabled:bg-gray-400 dark:disabled:bg-gray-600"
+            className="w-full py-3 rounded-xl text-white text-sm sm:text-base font-semibold
+            bg-gradient-to-r from-purple-500 to-indigo-500
+            hover:scale-[1.02] active:scale-95
+            transition-all shadow-lg disabled:opacity-60"
           >
-            {loading ? "Logging in..." : "Login"}
+            {loading ? "Logging..." : "Continue"}
           </button>
         </form>
 
-        {/* Divider */}
-        <div className="my-4 flex items-center gap-3">
+        {/* DIVIDER */}
+        <div className="my-5 flex items-center gap-3">
           <div className="flex-1 h-px bg-gray-300 dark:bg-gray-700" />
-          <span className="text-xs text-gray-500 dark:text-gray-400">or</span>
+          <span className="text-xs text-gray-400">or</span>
           <div className="flex-1 h-px bg-gray-300 dark:bg-gray-700" />
         </div>
 
-        {/* Register Redirect */}
-        <p className="text-center text-sm text-gray-600 dark:text-gray-300">
-          Don't have an account?{" "}
+        {/* FOOTER */}
+        <p className="text-center text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+          New here?{" "}
           <Link
             to="/register"
-            className="text-purple-600 dark:text-purple-400 font-semibold hover:underline"
+            className="text-purple-600 font-semibold hover:underline"
           >
-            Register
+            Create account
           </Link>
         </p>
       </div>
